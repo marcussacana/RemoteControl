@@ -8,8 +8,8 @@ A Compact Library to do simple operations in a external process.
 - Invoke any DLL Export
 - Inject a Managed Assembly
 - Can Inject before the target process execution begins
-- Can read and write and release data in the process memory
-- Supports x64 and x86 Applications
+- Can read, write and release data in the process memory
+- Supports x64 and x86 Applications (Don't use Any CPU Builds)
 - And others minor but cool features...
 - Everything without extras files! you can merge the RemoteControl into your assembly and don't will see any dll!
 
@@ -31,7 +31,7 @@ Control.ResumeProcess();
 
 //If the target process don't have loaded the user32.dll, he will be automatically loaded!
 //int MessageBoxW(HWND hWnd, LPCWSTR lpText, LPCWSTR lpCaption, UINT uType);
-var Rst = Control.Invoke("user32.dll", "MessageBoxW", IntPtr.Zero, Message, Title, new IntPtr(0x30));
+var Rst = Control.Invoke("user32.dll", "MessageBoxW", IntPtr.Zero, Message, Title, new IntPtr(0x20 | 0x04));//0x20 = MB_ICONQUESTION, 0x04 = MB_YESNO
 switch (Rst.ToInt32()){
 	case 1:
 		Console.WriteLine("OK");
@@ -50,7 +50,7 @@ Console.WriteLine("Press any key to exit");
 Console.ReadKey();
 ```
 ![https://a.doko.moe/dqhajo.png](https://a.doko.moe/dqhajo.png)
-### And here, Injecting a Managed Assembly
+### Injecting a Managed Assembly
 ```csharp
 public static int EntryPoint(string Arg) {
 	MessageBox.Show(Arg, "Assembly Injected!", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -65,7 +65,7 @@ Control.WaitInitialize();
 Control.ResumeProcess();
 
 string CurrentAssembly = Assembly.GetExecutingAssembly().Location;
-string Message = "LOL, I'm a managed dll inside of the target process! ";
+string Message = "LOL, I'm a managed dll inside of the target process!";
 
 //If you have only one method like 'public static int XXXX(string Arg)' you don't need give the Injection EntryPoint
 int Ret = Controller.CLRInvoke(CurrentAssembly, Message);
