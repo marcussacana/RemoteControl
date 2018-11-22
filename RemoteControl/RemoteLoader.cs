@@ -1,0 +1,687 @@
+﻿using System;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Threading;
+using static VNX.Imports;
+using static VNX.Tools;
+
+namespace VNX {
+    public class RemoteControl {
+        bool x64Bits;
+        IntPtr hProcess;
+        Process Target;
+
+        IntPtr ExecuteInDefaultAppDomain = IntPtr.Zero;
+        IntPtr CLRRuntimeHost = IntPtr.Zero;
+
+        bool Debugging = false;
+
+        public RemoteControl(Process Proc) {
+            Target = Proc;
+            x64Bits = Is64Bit(Proc);
+
+            hProcess = OpenProcess(PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ, false, Proc.Id);
+        }
+
+        /// <summary>
+        /// Verify if you can use the <see cref="RemoteControl">RemoteLoader</see> with the target process
+        /// </summary>
+        /// <returns>If is an compatible proccess</returns>
+        public bool IsCompatibleProcess() => x64Bits == Environment.Is64BitProcess;
+
+        /// <summary>
+        /// Wait the process Initialize the required data to the <see cref="RemoteControl"/> works
+        /// </summary>
+        public void WaitInitialize() => WaitModuleLoad("Kernel32.dll");
+
+        /// <summary>
+        /// Verify if the target process is an .net proccess
+        /// </summary>
+        /// <returns>If the CLR is present in the process, returns true, otherwise returns false</returns>
+        public bool CLRAvaliable() => Target.LibraryLoaded("mscoree.dll");
+
+        /// <summary>
+        /// Create a new process suspended, call the <see cref="ResumeProcess"/> to begin the process execution
+        /// </summary>
+        /// <param name="Filename">Executable Path</param>
+        /// <param name="Arguments">Command Line Arguments</param>
+        /// <param name="CreatedProcess">The Created Process</param>
+        public RemoteControl(string Filename, out Process CreatedProcess, string Arguments = "") {
+            var PI = CreateProcessSuspended(Filename, Arguments);
+            hProcess = PI.hProcess;
+            Target = Process.GetProcessById(unchecked((int)PI.dwProcessId));
+            CreatedProcess = Target;
+
+            x64Bits = Is64Bit(Target);
+            Debugging = true;
+        }
+
+        /// <summary>
+        /// If the process has created using the <see cref="RemoteControl"/> you need call this function to start the process
+        /// </summary>
+        public void ResumeProcess() {
+            Detach();
+            ResumeThreads();
+        }
+
+        /// <summary>
+        /// Resume the target process if you have suspended it
+        /// </summary>
+        public void ResumeThreads() {
+            foreach (var Thread in Target.Threads.Cast<ProcessThread>()) {
+                var Handle = OpenThread(ThreadAccess.SUSPEND_RESUME, false, (uint)Thread.Id);
+                ResumeThread(Handle);
+                CloseHandle(Handle);
+            }
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        public void SuspendThreads() {
+            foreach (var Thread in Target.Threads.Cast<ProcessThread>()) {
+                var Handle = OpenThread(ThreadAccess.SUSPEND_RESUME, false, (uint)Thread.Id);
+                SuspendThread(Handle);
+                CloseHandle(Handle);
+            }
+        }
+
+        /// <summary>
+        /// Wait the target process load a certain module
+        /// </summary>
+        public void WaitModuleLoad(string Module) {
+            if (Target.LibraryLoaded(Module))
+                return;
+
+            if (!Debugging)
+                throw new Exception("You need create the process with the RemoteLoader to wait an module load event");
+
+            new Thread(() => {
+                Thread.Sleep(100);
+                ResumeThreads();
+            }).Start();
+
+            bool Loaded = false;
+            while (!Loaded && WaitForDebugEvent(out DEBUG_EVENT Event, INFINITE)) {
+                switch (Event.dwDebugEventCode) {
+                    case DebugEvent.LOAD_DLL_DEBUG_EVENT:
+                        Loaded = Target.LibraryLoaded(Module);
+                        break;
+                }
+                ContinueDebugEvent(Event.dwProcessId, Event.dwThreadId, DEBUG_CONTINUE.DBG_CONTINUE);
+            }
+            SuspendThreads();
+        }
+
+        /// <summary>
+        /// Detach the RemoteLoader debugger from the process
+        /// <para>After call this function you can't use the WaitModuleLoad Function more</para>
+        /// </summary>
+        public void Detach() {
+            if (!Debugging)
+                return;
+
+            Debugging = false;
+            DebugActiveProcessStop((uint)Target.Id);
+        }
+
+        /// <summary>
+        /// Inject the CLR in the target process
+        /// </summary>
+        /// <param name="Version">Version to load in the target process</param>
+        /// <returns>A Pointer to the <a href="https://docs.microsoft.com/en-us/dotnet/framework/unmanaged-api/hosting/iclrruntimehost-executeindefaultappdomain-method">ExecuteInDefaultAppDomain</a> function</returns>
+        public void StartCLR() {
+            if (!IsCompatibleProcess())
+                throw new Exception($"The Target Process isn't an {(Environment.Is64BitProcess ? "x64" : "x32")} Process");
+
+            if (Debugging)
+                WaitInitialize();
+
+            if (CLRAvaliable())
+                throw new Exception("The target process already have loaded the CLR");
+
+            IntPtr ICLRMetaHost    = Target.Alloc(new byte[IntPtr.Size]);//http://source.roslyn.codeplex.com/#Microsoft.CodeAnalysis/Interop/IClrMetaHost.cs
+            IntPtr ICLRRuntimeInfo = Target.Alloc(new byte[IntPtr.Size]);//http://source.roslyn.codeplex.com/#microsoft.codeanalysis/Interop/IClrRuntimeInfo.cs,485a48c96d61baeb,references
+            IntPtr ICLRRuntimeHost = Target.Alloc(new byte[IntPtr.Size]);//https://github.com/CentroEPiaggio/SoftLEGS-Project/blob/5b2eb55b8f43f07189118e477bd4e5c0114f6c8e/casadi-matlabR2013a-v3.1.1/casadi/jit/mingw/mscoree.h#L1230
+
+            IntPtr CLSID_CLRMetaHost    = Target.Alloc(new Guid("9280188D-0E8E-4867-B30C-7FA83884E8DE").ToByteArray());
+            IntPtr CLSID_CLRRuntimeHost = Target.Alloc(new Guid("90F1A06E-7712-4762-86B5-7A5EBA6BDB02").ToByteArray());
+            IntPtr IID_ICLRMetaHost     = Target.Alloc(new Guid("D332DB9E-B9B3-4125-8207-A14884F53216").ToByteArray());
+            IntPtr IID_ICLRRuntimeInfo  = Target.Alloc(new Guid("BD39D1D2-BA2F-486A-89B0-B4B0CB466891").ToByteArray());
+            IntPtr IID_ICLRRuntimeHost  = Target.Alloc(new Guid("90F1A06C-7712-4762-86B5-7A5EBA6BDB02").ToByteArray());
+
+            MIntPtr<HResult> Result = Invoke("mscoree.dll", "CLRCreateInstance", CLSID_CLRMetaHost, IID_ICLRMetaHost, ICLRMetaHost);
+            if (Result.Parse() != HResult.S_OK)
+                throw new Exception($"Error: {Result.ToString()} (0x{((uint)Result).ToString("X8")})");
+
+            byte[] Data = Target.Read(ICLRMetaHost, (uint)IntPtr.Size);
+            IntPtr GetRuntime = Data.ToIntPtr();
+            IntPtr MetaHostIntance = GetRuntime;
+
+            Data = Target.Read(GetRuntime, (uint)IntPtr.Size);
+            GetRuntime = Data.ToIntPtr().Sum(IntPtr.Size * 3);//1st function, The vTable have 3 pointers before the first function
+
+            Data = Target.Read(GetRuntime, (uint)IntPtr.Size);
+            GetRuntime = Data.ToIntPtr();
+
+            IntPtr pVersion = Target.AllocString(DotNetVerName(FrameworkVersion.DotNet40), true);
+
+
+            Result = Invoke(GetRuntime, MetaHostIntance, pVersion, IID_ICLRRuntimeInfo, ICLRRuntimeInfo);
+            if (Result.Parse() != HResult.S_OK)
+                throw new Exception($"Error: {Result.ToString()} (0x{((uint)Result).ToString("X8")})");
+
+            Data = Target.Read(ICLRRuntimeInfo, (uint)IntPtr.Size);
+            IntPtr GetInterface = Data.ToIntPtr();
+            IntPtr RuntimeInfoInstance = GetInterface;
+
+            Data = Target.Read(GetInterface, (uint)IntPtr.Size);
+            GetInterface = Data.ToIntPtr();
+
+            Data = Target.Read(GetInterface.Sum(IntPtr.Size * 9), (uint)IntPtr.Size);//6th Function + vTable Prefix
+            GetInterface = Data.ToIntPtr();
+
+            Result = Invoke(GetInterface, RuntimeInfoInstance, CLSID_CLRRuntimeHost, IID_ICLRRuntimeHost, ICLRRuntimeHost);
+            if (Result.Parse() != HResult.S_OK)
+                throw new Exception($"Error: {Result.ToString()} (0x{((uint)Result).ToString("X8")})");
+
+            Data = Target.Read(ICLRRuntimeHost, (uint)IntPtr.Size);
+            IntPtr Start = Data.ToIntPtr();
+            IntPtr HostInstance = Start;
+
+            Data = Target.Read(Start, (uint)IntPtr.Size);
+            Start = Data.ToIntPtr();
+
+            Data = Target.Read(Start.Sum(IntPtr.Size * 3), (uint)IntPtr.Size);
+            Start = Data.ToIntPtr();
+
+            Result = Invoke(Start, HostInstance);
+            if (Result.Parse() != HResult.S_OK)
+                throw new Exception($"Error: {Result.ToString()} (0x{((uint)Result).ToString("X8")})");
+
+            Data = Target.Read(ICLRRuntimeHost, (uint)IntPtr.Size);
+            ExecuteInDefaultAppDomain = Data.ToIntPtr();
+            CLRRuntimeHost = ExecuteInDefaultAppDomain;
+            Data = Target.Read(ExecuteInDefaultAppDomain, (uint)IntPtr.Size);
+            ExecuteInDefaultAppDomain = Data.ToIntPtr();
+            Data = Target.Read(ExecuteInDefaultAppDomain.Sum(IntPtr.Size * 11), (uint)IntPtr.Size);
+            ExecuteInDefaultAppDomain = Data.ToIntPtr();
+
+        }
+
+        /// <summary>
+        /// Inject a <see cref="Assembly">Assembly</see> in the target process and
+        /// invoke the specified method.
+        /// </summary>
+        /// <param name="AssemblyPath">The <see cref="Assembly">Assembly</see> file path</param>
+        /// <param name="TypeName">The Full Name to the method class</param>
+        /// <param name="MethodName">The Method Name in the Class</param>
+        /// <param name="Argument">A Argument to give to the invoke method</param>
+        /// <returns>The returned value from the invoked method</returns>
+        public int CLRInvoke(string AssemblyPath, string TypeName, string MethodName, string Argument) {
+            if (!(MIntPtr)ExecuteInDefaultAppDomain)
+                StartCLR();
+
+            IntPtr Ret = Target.Alloc(new byte[4]);
+
+            IntPtr AsmPath = Target.AllocString(AssemblyPath, true);
+            IntPtr TpName = Target.AllocString(TypeName, true);
+            IntPtr MthdName = Target.AllocString(MethodName, true);
+            IntPtr Arg = Target.AllocString(Argument, true);
+
+            HResult Failed = (MIntPtr<HResult>)Invoke(ExecuteInDefaultAppDomain, CLRRuntimeHost, AsmPath, TpName, MthdName, Arg, Ret);
+            switch (Failed) {
+                case HResult.S_OK:
+                    break;
+                default:
+                    throw new Exception($"Error: {Failed.ToString()} (0x{((uint)Failed).ToString("X8")})");
+            }
+            int Result = Target.Read(Ret, 4).ToInt32();
+
+            Target.Free(AsmPath);
+            Target.Free(TpName);
+            Target.Free(MthdName);
+            Target.Free(Arg);
+            Target.Free(Ret);
+
+            return Result;
+        }
+
+        /// <summary>
+        /// Inject a <see cref="Assembly">Assembly</see> in the target process
+        /// and Invoke the first matched method with 'public static int EntryPoint(string Arg)' in the <see cref="Assembly">Assembly</see>
+        /// </summary>
+        /// <param name="AssemblyPath">The <see cref="Assembly">Assembly</see> file path</param>
+        /// <returns>The returned value from the invoked method</returns>
+        public int CLRInvoke(string AssemblyPath, string Argument = null) {
+            if (!(MIntPtr)ExecuteInDefaultAppDomain)
+                StartCLR();
+
+            AppDomain Domain = AppDomain.CreateDomain("Assembly Loader");
+            var Asm = Domain.Load(File.ReadAllBytes(AssemblyPath));
+            var Functions = (from x in Asm.GetExportedTypes() select x.GetMethods()).ToArray();
+            for (uint x = 0; x < Functions.LongLength; x++)
+                for (uint y = 0; y < Functions[x].LongLength; y++) {
+                    var Method = Functions[x][y];
+                    if (Method.ReturnType != typeof(int))
+                        continue;
+                    if (!Method.IsStatic || !Method.IsPublic)
+                        continue;
+                    var Parameters = Method.GetParameters();
+                    long Required = (from z in Parameters where !z.IsOptional select z).LongCount();
+                    if (Required != 1)
+                        continue;
+                    if (Parameters[0].ParameterType != typeof(string))
+                        continue;
+                    AppDomain.Unload(Domain);
+                    return CLRInvoke(AssemblyPath, Method.DeclaringType.FullName, Method.Name, Argument);
+                }
+
+            AppDomain.Unload(Domain);
+            throw new Exception("No Valid EntryPoint Found in the target assembly");
+        }
+
+        /// <summary>
+        /// Verify if the specified DLL is compatible with the target process
+        /// </summary>
+        /// <param name="Path">Path to an module</param>
+        /// <returns>If compatible, returns true otherwise returns false</returns>
+        public bool IsCompatibleModule(string Path) => Is64Bit(Path) == x64Bits;
+
+        /// <summary>
+        /// Load an Library in the target proccess
+        /// <para>This will cause the module to be loaded in the current process</para>
+        /// </summary>
+        /// <param name="Library">Library Name or Path</param>
+        /// <returns>The Module Handler</returns>
+        public IntPtr LoadLibrary(string Library) {
+            IntPtr ModuleName = Target.AllocString(Library, true);
+            IntPtr Result = Invoke("kernel32.dll", "LoadLibraryW", ModuleName);
+            Target.Free(ModuleName);
+            return Result;
+        }
+
+        /// <summary>
+        /// Invoke a function with arguments and get the return value
+        /// </summary>
+        /// <param name="Module">The module of the function</param>
+        /// <param name="Function">The function to be called</param>
+        /// <param name="Arguments">Arguments to be given to the function</param>
+        /// <returns>The return function value</returns>
+        public IntPtr Invoke(string Module, string Function, params IntPtr[] Arguments) => Invoke(GetProcAddress(Module, Function), Arguments);
+
+        /// <summary>
+        /// Invoke an function without wait the execution
+        /// </summary>
+        /// <param name="Module">The module of the function</param>
+        /// <param name="Function">The function to be called</param>
+        /// <param name="Arguments">Arguments to be given to the function</param>
+        public void BeginInvoke(string Module, string Function, params IntPtr[] Arguments) => BeginInvoke(GetProcAddress(Module, Function), Arguments);
+
+
+        /// <summary>
+        /// Invoke a function with arguments and get the return value
+        /// </summary>
+        /// <param name="FuncAddr">The function address to be called</param>
+        /// <param name="Arguments">Arguments to be given to the function</param>
+        /// <returns>The return function value</returns>
+        public IntPtr Invoke(IntPtr FuncAddr, params IntPtr[] Arguments) {
+            if (!IsCompatibleProcess())
+                throw new Exception($"The Target Process isn't an {(Environment.Is64BitProcess ? "x64" : "x32")} Process");
+
+            if (x64Bits)
+                return x64Invoke(FuncAddr, Arguments);
+            return x32Invoke(FuncAddr, Arguments);
+        }
+
+        /// <summary>
+        /// Invoke an function without wait the execution
+        /// </summary>
+        /// <param name="FuncAddr">The function address to be called</param>
+        /// <param name="Arguments">Arguments to be given to the function</param>
+        public void BeginInvoke(IntPtr FuncAddr, params IntPtr[] Arguments) {
+            if (!IsCompatibleProcess())
+                throw new Exception($"The Target Process isn't an {(Environment.Is64BitProcess ? "x64" : "x32")} Process");
+
+            if (x64Bits)
+                x64BeginInvoke(FuncAddr, Arguments);
+            else
+                x32BeginInvoke(FuncAddr, Arguments);
+        }
+
+        /// <summary>
+        /// Get the pointer to an function in the target process
+        /// <para>This will cause the module to be loaded in the current process</para>
+        /// </summary>
+        /// <param name="Module">The module of the function</param>
+        /// <param name="Function">The function to be searched</param>
+        /// <returns>The function address</returns>
+        public IntPtr GetProcAddress(string Module, string Function) => GetProcAddressEx(Module, Function);
+
+        private bool LibraryLoadedLocal(string Library) {
+            string Module = Path.GetFileName(Library).ToLower();
+            var Modules = Process.GetCurrentProcess().Modules.Cast<ProcessModule>();
+            var Rst = (from x in Modules where x.ModuleName.ToLower() == Module select x).ToArray();
+
+            return Rst.Length != 0;
+        }
+
+        private IntPtr GetProcAddressEx(string Module, string Function) {
+            if (!IsCompatibleProcess())
+                throw new Exception($"The Target Process isn't an {(Environment.Is64BitProcess ? "x64" : "x32")} Process");
+
+            if (!Target.LibraryLoaded("kernel32.dll"))
+                return IntPtr.Zero;
+
+            if (!Target.LibraryLoaded(Module))
+                if (LoadLibrary(Module) == IntPtr.Zero)
+                    return IntPtr.Zero;
+
+            if (LibraryLoadedLocal(Module))
+                return GetRemoteProcAddress(Module, Function);
+
+
+            IntPtr GetModuleHld = GetRemoteProcAddress("kernel32.dll", "GetModuleHandleW");
+            IntPtr GetProcAddr = GetRemoteProcAddress("kernel32.dll", "GetProcAddress");
+            IntPtr ModuleName = Target.AllocString(Path.GetFileName(Module), true);
+            IntPtr FuncName = Target.AllocString(Function, false);
+
+            IntPtr hModule = Invoke(GetModuleHld, ModuleName);
+            IntPtr Result = Invoke(GetProcAddr, hModule, FuncName);
+
+            bool Sucess = Target.Free(ModuleName);
+            Sucess = Target.Free(FuncName);
+
+            return Result;
+        }
+
+        private MIntPtr GetRemoteProcAddress(string Module, string Function) {
+            Target.Refresh();
+
+            var Handle = LoadLibraryA(Module);
+            MIntPtr func = Imports.GetProcAddress(Handle, Function);
+            if (!func)
+                return IntPtr.Zero;
+
+            ulong offset = func.ToUInt64() - Handle.ToUInt64();            
+
+            return Target.GetModuleByName(Module).Sum(offset);
+        }
+
+        private void x32BeginInvoke(MIntPtr FuncAddr, params IntPtr[] Arguments) => x32Invoke(FuncAddr, false, Arguments);
+        private IntPtr x32Invoke(MIntPtr FuncAddr, params IntPtr[] Arguments) => x32Invoke(FuncAddr, true, Arguments);
+        private IntPtr x32Invoke(IntPtr FuncAddr, bool CatchReturn, params IntPtr[] Arguments) {
+            using (MemoryStream Stream = new MemoryStream()) {
+
+                //Move CreateThread paramter to EAX and fix stack
+                byte[][] Commands = new byte[][] {
+                    //pop eax
+                    new byte[] { 0x58 },
+                    //xchg [esp], eax
+                    new byte[] { 0x87, 0x04,  0x24 }
+                };
+                foreach (byte[] Command in Commands)
+                    Stream.Write(Command, 0, Command.Length);
+
+
+                //Push All Arguments
+                foreach (IntPtr Argument in Arguments.Reverse()) {
+                    Stream.WriteByte(0x68);//Push DW
+                    Stream.Write(BitConverter.GetBytes(Argument.ToInt32()), 0, 4);
+                }
+
+                Commands = new byte[][] {
+                    //mov eax, FuncAddr
+                    new byte[] { 0xB8 }.Append(FuncAddr.ToUInt32().GetBytes()),
+                    //call eax
+                    new byte[] { 0xFF, 0xD0 },
+                };
+
+                if (CatchReturn)
+                    Commands = Commands.Append(new byte[][] {
+                        //push ebx
+                        new byte[] { 0x53 },                    
+                        //Call NextInstruction
+                        new byte[] { 0xE8, 0x00, 0x00, 0x00, 0x00 },
+                        //pop ebx
+                        new byte[] { 0x5B },
+                        //mov dword [ebx+0xB], eax
+                        new byte[] { 0x89, 0x43, 0x0B },
+                        //mov byte  [ebx+0xA], 0x1
+                        new byte[] { 0xC6, 0x43, 0x0A, 0x01 },
+                        //pop ebx
+                        new byte[] { 0x5B }
+                    });
+
+                Commands = Commands.Append(new byte[][] {
+                    //ret
+                    new byte[] { 0xC3 }
+                });
+
+                if (CatchReturn)
+                    Commands = Commands.Append(new byte[][] {
+                        //EBX+A
+                        new byte[] { 0x00 },
+                        //EBX+B
+                        new byte[] { 0x00, 0x00, 0x00, 0x00 }
+                    });
+
+                foreach (byte[] Command in Commands)
+                    Stream.Write(Command, 0, Command.Length);
+
+
+                IntPtr Function = Target.Alloc(Stream.ToArray(), true);
+                IntPtr Thread = CreateRemoteThread(hProcess, IntPtr.Zero, 0, Function, IntPtr.Zero, 0, IntPtr.Zero);
+                ResumeThread(Thread);
+
+                if (CatchReturn) {
+                    IntPtr RetData = Function.Sum(Stream.Length - 5);
+
+                    uint Status = 0;
+                    byte[] Buffer = new byte[5];
+                    while (true) {
+                        System.Threading.Thread.Sleep(10);
+                        Buffer = Target.Read(RetData, (uint)Buffer.LongLength);
+                        if (Buffer[0] != 0x1) {
+                            GetExitCodeThread(Thread, out Status);
+                            if (Status == THREAD_STILL_ACTIVE)
+                                continue;
+                            else
+                                throw new Exception("An Unmanaged Exception in the target process has occured");
+                        }
+                        break;
+                    }
+
+                    do {
+                        GetExitCodeThread(Thread, out Status);
+                    } while (Status == THREAD_STILL_ACTIVE);
+
+                    Target.Free(Function);
+
+                    return BitConverter.ToUInt32(Buffer, 1).ToIntPtr();
+                } else
+                    return IntPtr.Zero;
+            }
+        }
+
+        private void x64BeginInvoke(IntPtr FuncAddr, params IntPtr[] Arguments) => x64Invoke(FuncAddr, false, Arguments);
+        private IntPtr x64Invoke(IntPtr FuncAddr, params IntPtr[] Arguments) => x64Invoke(FuncAddr, true, Arguments);
+        private IntPtr x64Invoke(IntPtr FuncAddr, bool CatchReturn, params IntPtr[] Arguments) {
+            using (MemoryStream Stream = new MemoryStream()) {
+                byte[][] Commands = new byte[][] {
+                    //push rbp
+                    new byte [] { 0x55 },
+                    //mov rbp, rsp
+                    new byte[] { 0x48, 0x89, 0xE5 },
+                    
+                    //(2 times to keep the stack padding)
+                    //push rbx 
+                    new byte[] { 0x53 },
+                    //push rbx
+                    new byte[] { 0x53 }
+                };
+                foreach (byte[] Command in Commands)
+                    Stream.Write(Command, 0, Command.Length);
+
+                uint MinStack = 0x30;
+                uint StackLen = MinStack;
+                if (Arguments.Length > 4)
+                    StackLen += ((uint)((Arguments.LongLength - 4) + (Arguments.LongLength % 2))) * 8;
+
+
+                Commands = new byte[][] {
+                    //sub rsp, MinStack
+                    new byte[] { 0x48, 0x81, 0xEC }.Append(MinStack.GetBytes())
+                };
+                foreach (byte[] Command in Commands)
+                    Stream.Write(Command, 0, Command.Length);
+
+
+                int ID = Arguments.Length;
+                foreach (IntPtr Argument in Arguments.Reverse()) {
+                    switch (--ID) {
+                        case 0:
+                            Commands = new byte[][] {
+                                //movabs rcx, Argument
+                                new byte[] { 0x48, 0xB9 }.Append(Argument.ToUInt64().GetBytes())
+                            };
+                            break;
+                        case 1:
+                            Commands = new byte[][] {
+                                //movabs rdx, Argument
+                                new byte[] { 0x48, 0xBA }.Append(Argument.ToUInt64().GetBytes())
+                            };
+                            break;
+                        case 2:
+                            Commands = new byte[][] {
+                                //movabs r8, Argument
+                                new byte[] { 0x49, 0xB8 }.Append(Argument.ToUInt64().GetBytes())
+                            };
+                            break;
+                        case 3:
+                            Commands = new byte[][] {
+                                //movabs r9, Argument
+                                new byte[] { 0x49, 0xB9 }.Append(Argument.ToUInt64().GetBytes())
+                            };
+                            break;
+                        default:
+                            Commands = new byte[][] {
+                                //push "4 last bytes from Argument"
+                                new byte[] { 0x68 }.Append(Argument.ToUInt32().GetBytes()),
+                                //mov [rsp+4], "4 frist bytes from Argument"
+                                new byte[] { 0xC7, 0x44, 0x24, 0x04 }.Append(Argument.HighToUInt32().GetBytes())
+                            };
+                            break;
+                    }
+                    foreach (byte[] Command in Commands)
+                        Stream.Write(Command, 0, Command.Length);
+                }
+
+
+                if (Arguments.LongLength % 2 != 0 && Arguments.Length > 4) {
+                    Commands = new byte[][] {
+                        //sub rsp, 0x8
+                        new byte[] { 0x48, 0x81, 0xEC }.Append(0x8.GetBytes())
+                    };
+                    foreach (byte[] Command in Commands)
+                        Stream.Write(Command, 0, Command.Length);
+                }
+
+                if (Arguments.Length > 4) {
+                    for (int i = 0; i < 4; i++) {
+                        StackLen += 8;
+                        Commands = new byte[][] {
+                            //push 0x00
+                            new byte[] { 0x6A, 0x00 }
+                        };
+                        foreach (byte[] Command in Commands)
+                            Stream.Write(Command, 0, Command.Length);
+                    }
+                }
+
+
+                Commands = new byte[][] {
+                    //xor rax, rax
+                    new byte[] { 0x48, 0x31, 0xC0 },
+                    //movabs rbx, FuncAddr
+                    new byte[] { 0x48, 0xBB }.Append(FuncAddr.ToUInt64().GetBytes()),
+                    //call rbx
+                    new byte[] { 0xFF, 0xD3 },                    
+                    //add rsp, DW
+                    new byte[] { 0x48, 0x81, 0xC4 }.Append(StackLen.GetBytes())
+                };
+
+                if (CatchReturn)
+                    Commands = Commands.Append(new byte[][] {
+                        //Call NextInstruction
+                        new byte[] { 0xE8, 0x00, 0x00, 0x00, 0x00 },
+                        //pop rbx
+                        new byte[] { 0x5B },
+                        //mov qword [rbx+0x0E], rax
+                        new byte[] { 0x48, 0x89, 0x43, 0x0E  },
+                        //mov byte  [rbx+0x0D], 1
+                        new byte[] { 0xC6, 0x43, 0x0D, 0x01 }
+                    });
+
+                Commands = Commands.Append(new byte[][] {
+                    //pop rbx
+                    new byte[] { 0x5B },
+                    //pop rbx
+                    new byte[] { 0x5B },
+                    //leave
+                    new byte[] { 0xC9 },
+                    //ret
+                    new byte[] { 0xC3 }
+                });
+
+                if (CatchReturn)
+                    Commands = Commands.Append(new byte[][] {                    
+                        //RBX+0xD
+                        new byte[] { 0x00 },
+                        //RBX+0xE
+                        new byte[] { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
+                    });
+
+                foreach (byte[] Command in Commands)
+                    Stream.Write(Command, 0, Command.Length);
+
+
+                IntPtr Function = Target.Alloc(Stream.ToArray(), true);
+                IntPtr Thread = CreateRemoteThread(hProcess, IntPtr.Zero, 0, Function, IntPtr.Zero, 0, IntPtr.Zero);
+                ResumeThread(Thread);
+
+                if (CatchReturn) {
+                    IntPtr RetData = Function.Sum(Stream.Length - 9);
+
+                    uint Status = 0;
+                    byte[] Buffer = new byte[9];
+                    while (GetExitCodeThread(Thread, out Status)) {
+                        if (Status != THREAD_STILL_ACTIVE)
+                            break;
+
+                        System.Threading.Thread.Sleep(10);
+                        Buffer = Target.Read(RetData, (uint)Buffer.LongLength);
+                        if (Buffer[0] != 0x1)
+                            continue;
+                        break;
+                    }
+
+                    do {
+                        GetExitCodeThread(Thread, out Status);
+                    } while (Status == THREAD_STILL_ACTIVE);
+
+                    Target.Free(Function);
+
+                    return BitConverter.ToUInt64(Buffer, 1).ToIntPtr();
+                } else
+                    return IntPtr.Zero;
+            }
+        }  
+
+    }    
+
+}
