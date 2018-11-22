@@ -73,6 +73,9 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PostBuildEvent>copy /Y "$(TargetPath)" "$(SolutionDir)Example\$(OutDir)"</PostBuildEvent>
+    <PostBuildEvent>if not exist "$(SolutionDir)Example\$(OutDir)" (
+mkdir "$(SolutionDir)Example\$(OutDir)"
+)
+copy /Y "$(TargetPath)" "$(SolutionDir)Example\$(OutDir)"</PostBuildEvent>
   </PropertyGroup>
 </Project>
