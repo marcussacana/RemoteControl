@@ -159,14 +159,14 @@ namespace VNX {
                 throw new Exception($"Error: {Result.ToString()} (0x{((uint)Result).ToString("X8")})");
 
             byte[] Data = Target.Read(ICLRMetaHost, (uint)IntPtr.Size);
-            IntPtr GetRuntime = Data.ToIntPtr();
+            IntPtr GetRuntime = Data.ToIntPtr(x64Bits);
             IntPtr MetaHostIntance = GetRuntime;
 
             Data = Target.Read(GetRuntime, (uint)IntPtr.Size);
-            GetRuntime = Data.ToIntPtr().Sum(IntPtr.Size * 3);//1st function, The vTable have 3 pointers before the first function
+            GetRuntime = Data.ToIntPtr(x64Bits).Sum(IntPtr.Size * 3);//1st function, The vTable have 3 pointers before the first function
 
             Data = Target.Read(GetRuntime, (uint)IntPtr.Size);
-            GetRuntime = Data.ToIntPtr();
+            GetRuntime = Data.ToIntPtr(x64Bits);
 
             IntPtr pVersion = Target.AllocString(DotNetVerName(FrameworkVersion.DotNet40), true);
 
@@ -176,40 +176,40 @@ namespace VNX {
                 throw new Exception($"Error: {Result.ToString()} (0x{((uint)Result).ToString("X8")})");
 
             Data = Target.Read(ICLRRuntimeInfo, (uint)IntPtr.Size);
-            IntPtr GetInterface = Data.ToIntPtr();
+            IntPtr GetInterface = Data.ToIntPtr(x64Bits);
             IntPtr RuntimeInfoInstance = GetInterface;
 
             Data = Target.Read(GetInterface, (uint)IntPtr.Size);
-            GetInterface = Data.ToIntPtr();
+            GetInterface = Data.ToIntPtr(x64Bits);
 
             Data = Target.Read(GetInterface.Sum(IntPtr.Size * 9), (uint)IntPtr.Size);//6th Function + vTable Prefix
-            GetInterface = Data.ToIntPtr();
+            GetInterface = Data.ToIntPtr(x64Bits);
 
             Result = Invoke(GetInterface, RuntimeInfoInstance, CLSID_CLRRuntimeHost, IID_ICLRRuntimeHost, ICLRRuntimeHost);
             if (Result.Parse() != HResult.S_OK)
                 throw new Exception($"Error: {Result.ToString()} (0x{((uint)Result).ToString("X8")})");
 
             Data = Target.Read(ICLRRuntimeHost, (uint)IntPtr.Size);
-            IntPtr Start = Data.ToIntPtr();
+            IntPtr Start = Data.ToIntPtr(x64Bits);
             IntPtr HostInstance = Start;
 
             Data = Target.Read(Start, (uint)IntPtr.Size);
-            Start = Data.ToIntPtr();
+            Start = Data.ToIntPtr(x64Bits);
 
             Data = Target.Read(Start.Sum(IntPtr.Size * 3), (uint)IntPtr.Size);
-            Start = Data.ToIntPtr();
+            Start = Data.ToIntPtr(x64Bits);
 
             Result = Invoke(Start, HostInstance);
             if (Result.Parse() != HResult.S_OK)
                 throw new Exception($"Error: {Result.ToString()} (0x{((uint)Result).ToString("X8")})");
 
             Data = Target.Read(ICLRRuntimeHost, (uint)IntPtr.Size);
-            ExecuteInDefaultAppDomain = Data.ToIntPtr();
+            ExecuteInDefaultAppDomain = Data.ToIntPtr(x64Bits);
             CLRRuntimeHost = ExecuteInDefaultAppDomain;
             Data = Target.Read(ExecuteInDefaultAppDomain, (uint)IntPtr.Size);
-            ExecuteInDefaultAppDomain = Data.ToIntPtr();
+            ExecuteInDefaultAppDomain = Data.ToIntPtr(x64Bits);
             Data = Target.Read(ExecuteInDefaultAppDomain.Sum(IntPtr.Size * 11), (uint)IntPtr.Size);
-            ExecuteInDefaultAppDomain = Data.ToIntPtr();
+            ExecuteInDefaultAppDomain = Data.ToIntPtr(x64Bits);
 
         }
 
@@ -412,8 +412,8 @@ namespace VNX {
             return Target.GetModuleByName(Module).Sum(offset);
         }
 
-        private void x32BeginInvoke(MIntPtr FuncAddr, params IntPtr[] Arguments) => x32Invoke(FuncAddr, false, Arguments);
-        private IntPtr x32Invoke(MIntPtr FuncAddr, params IntPtr[] Arguments) => x32Invoke(FuncAddr, true, Arguments);
+        private void x32BeginInvoke(IntPtr FuncAddr, params IntPtr[] Arguments) => x32Invoke(FuncAddr, false, Arguments);
+        private IntPtr x32Invoke(IntPtr FuncAddr, params IntPtr[] Arguments) => x32Invoke(FuncAddr, true, Arguments);
         private IntPtr x32Invoke(IntPtr FuncAddr, bool CatchReturn, params IntPtr[] Arguments) {
             using (MemoryStream Stream = new MemoryStream()) {
 

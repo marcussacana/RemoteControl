@@ -9,7 +9,7 @@ A Compact Library to do simple operations in a external process.
 - Inject a Managed Assembly
 - Can Inject before the target process execution begins
 - Can read, write and release data in the process memory
-- Supports x64 and x86 Applications (Don't use Any CPU Builds)
+- Supports x64 and x86 Applications
 - And others minor but cool features...
 - Everything without extras files! you can merge the RemoteControl into your assembly and don't will see any dll!
 
@@ -68,7 +68,7 @@ string CurrentAssembly = Assembly.GetExecutingAssembly().Location;
 string Message = "LOL, I'm a managed dll inside of the target process!";
 
 //If you have only one method like 'public static int XXXX(string Arg)' you don't need give the Injection EntryPoint
-int Ret = Controller.CLRInvoke(CurrentAssembly, Message);
+int Ret = Control.CLRInvoke(CurrentAssembly, Message);
 //If you have more than one method like that, you need specify it
 //Since "EntryPoint" is inside the "Program" class, we use typeof(Program).FullName
 Ret = Control.CLRInvoke(CurrentAssembly, typeof(Program).FullName, "EntryPoint", Message);
@@ -78,7 +78,7 @@ Ret = Control.CLRInvoke(CurrentAssembly, typeof(Program).FullName, "EntryPoint",
 
 ### Extra
 
-[Unmanaged hooking from Managed Injected Assembly](https://github.com/marcussacana/StringReloads/blob/master/SRL/Hook/HookFX.cs)
+[Unmanaged hooking from Managed Injected Assembly](https://github.com/marcussacana/StringReloads/blob/master/SRL/Hook/HookFX.cs)  
 [PInvoke Tools](https://github.com/dahall/Vanara)
 
 

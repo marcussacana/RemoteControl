@@ -18,6 +18,7 @@ namespace VNX {
         public static IntPtr ToIntPtr(this ulong Int) => new IntPtr(unchecked((long)Int));
 
         public static IntPtr Sum(this IntPtr Pointer, ulong Value) => (Pointer.ToUInt64() + Value).ToIntPtr();
+        public static IntPtr Sum(this IntPtr Pointer, IntPtr Value) => (Pointer.ToUInt64() + Value.ToUInt64()).ToIntPtr();
         public static IntPtr Sum(this IntPtr Pointer, long Value) => (Pointer.ToUInt64() + (ulong)Value).ToIntPtr();
         public static MIntPtr Sum(this MIntPtr Pointer, ulong Value) => (Pointer.ToUInt64() + Value).ToIntPtr();
         public static MIntPtr Sum(this MIntPtr Pointer, long Value) => (Pointer.ToUInt64() + (ulong)Value).ToIntPtr();
@@ -32,7 +33,13 @@ namespace VNX {
         public static ulong ToUInt64(this byte[] Data, int Address = 0) => BitConverter.ToUInt64(Data, Address);
         public static long ToInt64(this byte[] Data, int Address = 0) => BitConverter.ToInt64(Data, Address);
 
-        public static IntPtr ToIntPtr(this byte[] Data) => IntPtr.Size == 8 && Data.Length >= 8 ? new IntPtr(Data.ToInt64()) : new IntPtr(Data.ToInt32()); 
+        public static IntPtr ToIntPtr(this byte[] Data, bool? x64 = null) {
+            if (x64.HasValue)
+                return new IntPtr(x64.Value ? Data.ToInt64() : Data.ToInt32());
+            if (Data.Length >= 8)
+                return new IntPtr(IntPtr.Size == 8 ? Data.ToInt64() : Data.ToInt32());
+            return new IntPtr(Data.ToInt32());
+        }
 
         public static T[] Append<T>(this T[] Ori, T[] New) => Ori.Concat(New).ToArray();
 
