@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.InteropServices;
+using static VNX.Imports;
 using static VNX.Tools;
 
 namespace VNX {
@@ -33,6 +35,8 @@ namespace VNX {
         public static ulong ToUInt64(this byte[] Data, int Address = 0) => BitConverter.ToUInt64(Data, Address);
         public static long ToInt64(this byte[] Data, int Address = 0) => BitConverter.ToInt64(Data, Address);
 
+        public static uint SizeOf<T>(this T Struct) where T : struct => (uint)Marshal.SizeOf(typeof(T));
+
         public static IntPtr ToIntPtr(this byte[] Data, bool? x64 = null) {
             if (x64.HasValue)
                 return new IntPtr(x64.Value ? Data.ToInt64() : Data.ToInt32());
@@ -40,6 +44,9 @@ namespace VNX {
                 return new IntPtr(IntPtr.Size == 8 ? Data.ToInt64() : Data.ToInt32());
             return new IntPtr(Data.ToInt32());
         }
+
+        public static void Install(this LockInfo Locker) => Locker.Target.Write(Locker.Address, Locker.Locker);
+        public static void Uninstall(this LockInfo Locker) => Locker.Target.Write(Locker.Address, Locker.Unlocker);
 
         public static T[] Append<T>(this T[] Ori, T[] New) => Ori.Concat(New).ToArray();
 

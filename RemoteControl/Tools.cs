@@ -186,7 +186,8 @@ namespace VNX {
             ulong OptionalHeader = PEStart + 24;
             IntPtr EntryPointPtr = (OptionalHeader + 0x10).ToIntPtr();
 
-            return Read(Target.Handle, Module.Sum(EntryPointPtr), 4).ToIntPtr(Target.Is64Bits());
+            byte[] EP = Read(Target.Handle, Module.Sum(EntryPointPtr), 4);
+            return Module.Sum(EP.ToUInt32());
         }
 
         public static IntPtr AllocString(IntPtr hProcess, string String, bool Unicode) {

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -23,7 +24,7 @@ namespace VNX {
         [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
         public static extern bool VirtualFreeEx(IntPtr hProcess, IntPtr lpAddress, uint dwSize, AllocationType dwFreeType);
 
-        [DllImport("kernel32.dll")]
+        [DllImport("kernel32.dll", SetLastError = true)]
         public static extern bool VirtualProtectEx(IntPtr hProcess, IntPtr lpAddress, uint dwSize, ProtectionType flNewProtect, out ProtectionType lpflOldProtect);
 
         [DllImport("kernel32.dll", SetLastError = true)]
@@ -32,38 +33,38 @@ namespace VNX {
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern bool ReadProcessMemory(IntPtr hProcess, IntPtr lpBaseAddress, [Out] byte[] lpBuffer, uint dwSize, out uint lpNumberOfBytesRead);
 
-        [DllImport("kernel32.dll")]
+        [DllImport("kernel32.dll", SetLastError = true)]
         public static extern IntPtr CreateRemoteThread(IntPtr hProcess, IntPtr lpThreadAttributes, uint dwStackSize, IntPtr lpStartAddress, IntPtr lpParameter, uint dwCreationFlags, IntPtr lpThreadId);
 
-        [DllImport("kernel32.dll")]
+        [DllImport("kernel32.dll", SetLastError = true)]
         public static extern bool GetExitCodeThread(IntPtr hThread, out uint lpExitCode);
 
-        [DllImport("kernel32.dll")]
+        [DllImport("kernel32.dll", SetLastError = true)]
         public static extern bool CreateProcess(string lpApplicationName, string lpCommandLine, IntPtr lpProcessAttributes, IntPtr lpThreadAttributes, bool bInheritHandles, ProcessCreationFlags dwCreationFlags, IntPtr lpEnvironment, string lpCurrentDirectory, ref STARTUPINFO lpStartupInfo, out PROCESS_INFORMATION lpProcessInformation);
 
-        [DllImport("kernel32.dll")]
+        [DllImport("kernel32.dll", SetLastError = true)]
         public static extern IntPtr OpenThread(ThreadAccess dwDesiredAccess, bool bInheritHandle, uint dwThreadId);
 
-        [DllImport("kernel32.dll")]
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern uint GetThreadId(IntPtr hThread);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
         public static extern uint ResumeThread(IntPtr hThread);
 
-        [DllImport("kernel32.dll")]
+        [DllImport("kernel32.dll", SetLastError = true)]
         public static extern int SuspendThread(IntPtr hThread);
 
-        [DllImport("kernel32", CharSet = CharSet.Auto, SetLastError = true)]
+        [DllImport("kernel32.dll")]
+        public static extern int VirtualQueryEx(IntPtr hProcess, IntPtr lpAddress, out MEMORY_BASIC_INFORMATION lpBuffer, uint dwLength);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
         public static extern bool CloseHandle(IntPtr handle);
 
         [DllImport("kernel32.dll", SetLastError = true, CallingConvention = CallingConvention.Winapi)]
         public static extern bool IsWow64Process([In] IntPtr processHandle, [Out, MarshalAs(UnmanagedType.Bool)] out bool wow64Process);
 
         [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern bool WaitForDebugEvent(out DEBUG_EVENT lpDebugEvent, uint dwMilliseconds);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern bool ContinueDebugEvent(uint dwProcessId, uint dwThreadId, DEBUG_CONTINUE dwContinueStatus);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern bool DebugActiveProcessStop(uint dwProcessId);
+        public static extern bool SetThreadPriority(IntPtr hThread, THREAD_PRIORITY nPriority);
 
         [DllImport("psapi.dll", SetLastError = true)]
         public static extern bool EnumProcessModulesEx(IntPtr hProcess, [Out] IntPtr lphModule, uint cb, out uint lpcbNeeded, DwFilterFlag dwff);
@@ -71,6 +72,18 @@ namespace VNX {
         [DllImport("psapi.dll", SetLastError = true)]
         public static extern uint GetModuleFileNameEx(IntPtr hProcess, IntPtr hModule, [Out] StringBuilder lpBaseName, int nSize);
 
+
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct MEMORY_BASIC_INFORMATION {
+            public IntPtr BaseAddress;
+            public IntPtr AllocationBase;
+            public ProtectionType AllocationProtect;
+            public IntPtr RegionSize;
+            public uint State;
+            public uint Protect;
+            public uint Type;
+        }
 
         public struct STARTUPINFO {
             public uint cb;
@@ -92,149 +105,11 @@ namespace VNX {
             public IntPtr hStdOutput;
             public IntPtr hStdError;
         }
-
         public struct PROCESS_INFORMATION {
             public IntPtr hProcess;
             public IntPtr hThread;
             public uint dwProcessId;
             public uint dwThreadId;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct DEBUG_EVENT {
-            public DebugEvent dwDebugEventCode;
-            public uint dwProcessId;
-            public uint dwThreadId;
-
-            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 86, ArraySubType = UnmanagedType.U1)]
-            byte[] debugInfo;
-
-            public EXCEPTION_DEBUG_INFO Exception {
-                get { return GetDebugInfo<EXCEPTION_DEBUG_INFO>(); }
-            }
-
-            public CREATE_THREAD_DEBUG_INFO CreateThread {
-                get { return GetDebugInfo<CREATE_THREAD_DEBUG_INFO>(); }
-            }
-
-            public CREATE_PROCESS_DEBUG_INFO CreateProcessInfo {
-                get { return GetDebugInfo<CREATE_PROCESS_DEBUG_INFO>(); }
-            }
-
-            public EXIT_THREAD_DEBUG_INFO ExitThread {
-                get { return GetDebugInfo<EXIT_THREAD_DEBUG_INFO>(); }
-            }
-
-            public EXIT_PROCESS_DEBUG_INFO ExitProcess {
-                get { return GetDebugInfo<EXIT_PROCESS_DEBUG_INFO>(); }
-            }
-
-            public LOAD_DLL_DEBUG_INFO LoadDll {
-                get { return GetDebugInfo<LOAD_DLL_DEBUG_INFO>(); }
-            }
-
-            public UNLOAD_DLL_DEBUG_INFO UnloadDll {
-                get { return GetDebugInfo<UNLOAD_DLL_DEBUG_INFO>(); }
-            }
-
-            public OUTPUT_DEBUG_STRING_INFO DebugString {
-                get { return GetDebugInfo<OUTPUT_DEBUG_STRING_INFO>(); }
-            }
-
-            public RIP_INFO RipInfo {
-                get { return GetDebugInfo<RIP_INFO>(); }
-            }
-
-            private T GetDebugInfo<T>() where T : struct {
-                var structSize = Marshal.SizeOf(typeof(T));
-                var pointer = Marshal.AllocHGlobal(structSize);
-                Marshal.Copy(debugInfo, 0, pointer, structSize);
-
-                var result = Marshal.PtrToStructure(pointer, typeof(T));
-                Marshal.FreeHGlobal(pointer);
-                return (T)result;
-            }
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct EXCEPTION_DEBUG_INFO {
-            public EXCEPTION_RECORD ExceptionRecord;
-            public uint dwFirstChance;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct EXCEPTION_RECORD {
-            public uint ExceptionCode;
-            public uint ExceptionFlags;
-            public IntPtr ExceptionRecord;
-            public IntPtr ExceptionAddress;
-            public uint NumberParameters;
-            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 15, ArraySubType = UnmanagedType.U4)]
-            public uint[] ExceptionInformation;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct CREATE_THREAD_DEBUG_INFO {
-            public IntPtr hThread;
-            public IntPtr lpThreadLocalBase;
-            public PTHREAD_START_ROUTINE lpStartAddress;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct CREATE_PROCESS_DEBUG_INFO {
-            public IntPtr hFile;
-            public IntPtr hProcess;
-            public IntPtr hThread;
-            public IntPtr lpBaseOfImage;
-            public uint dwDebugInfoFileOffset;
-            public uint nDebugInfoSize;
-            public IntPtr lpThreadLocalBase;
-            public PTHREAD_START_ROUTINE lpStartAddress;
-            public IntPtr lpImageName;
-            public ushort fUnicode;
-        }
-
-        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-        public delegate uint PTHREAD_START_ROUTINE(IntPtr lpThreadParameter);
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct EXIT_THREAD_DEBUG_INFO {
-            public uint dwExitCode;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct EXIT_PROCESS_DEBUG_INFO {
-            public uint dwExitCode;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct LOAD_DLL_DEBUG_INFO {
-            public IntPtr hFile;
-            public IntPtr lpBaseOfDll;
-            public uint dwDebugInfoFileOffset;
-            public uint nDebugInfoSize;
-            public IntPtr lpImageName;
-            public ushort fUnicode;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct UNLOAD_DLL_DEBUG_INFO {
-            public IntPtr lpBaseOfDll;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct OUTPUT_DEBUG_STRING_INFO {
-            [MarshalAs(UnmanagedType.LPStr)]
-            public string lpDebugStringData;
-
-            public ushort fUnicode;
-            public ushort nDebugStringLength;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct RIP_INFO {
-            public uint dwError;
-            public uint dwType;
         }
 
         public const int PROCESS_CREATE_THREAD = 0x0002;
@@ -246,6 +121,9 @@ namespace VNX {
         public const uint THREAD_STILL_ACTIVE = 0x00000103;
 
         public const uint INFINITE = uint.MaxValue;
+        public const uint EXCEPTION_BREAKPOINT = 0x80000003;
+        public const uint EXCEPTION_SINGLE_STEP = 0x80000004;
+        public const uint TRAP_FLAG = 0x0100;
 
         [Flags]
         public enum ProcessCreationFlags : uint {
@@ -293,6 +171,20 @@ namespace VNX {
             IMPERSONATE = 0x0100,
             DIRECT_IMPERSONATION = 0x0200
         }
+       
+        [Flags]
+        public enum THREAD_PRIORITY {
+            THREAD_MODE_BACKGROUND_BEGIN = 0x00010000,
+            THREAD_MODE_BACKGROUND_END = 0x00020000,
+            THREAD_PRIORITY_ABOVE_NORMAL = 1,
+            THREAD_PRIORITY_BELOW_NORMAL = -1,
+            THREAD_PRIORITY_HIGHEST = 2,
+            THREAD_PRIORITY_IDLE = -15,
+            THREAD_PRIORITY_LOWEST = -2,
+            THREAD_PRIORITY_NORMAL = 0,
+            THREAD_PRIORITY_TIME_CRITICAL = 15
+        }
+
 
         public enum DEBUG_CONTINUE : uint {
             DBG_CONTINUE = 0x00010002,
@@ -331,16 +223,11 @@ namespace VNX {
             LIST_MODULES_ALL = (LIST_MODULES_32BIT | LIST_MODULES_64BIT)
         }
 
-        public enum DebugEvent : uint {
-            EXCEPTION_DEBUG_EVENT = 1,
-            CREATE_THREAD_DEBUG_EVENT = 2,
-            CREATE_PROCESS_DEBUG_EVENT = 3,
-            EXIT_THREAD_DEBUG_EVENT = 4,
-            EXIT_PROCESS_DEBUG_EVENT = 5,
-            LOAD_DLL_DEBUG_EVENT = 6,
-            UNLOAD_DLL_DEBUG_EVENT = 7,
-            OUTPUT_DEBUG_STRING_EVENT = 8,
-            RIP_EVENT = 9
+        public struct LockInfo {
+            public IntPtr Address;
+            public byte[] Unlocker;
+            public byte[] Locker;
+            public Process Target;
         }
 
     }

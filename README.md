@@ -22,12 +22,15 @@ RemoteControl Control = new RemoteControl("C:\\Windows\\System32\\Notepad.exe", 
 Control.WaitInitialize();
 Control.WaitModuleLoad("user32.dll");//Since the notepad already load this dll, it's better wait it.
 
+//Without this the RemoteControl can't invoke functions in the target process
+//Lock the entry point and remove the suspended state of the process 
+Control.LockEntryPoint();
+
+
 //Alloc the string in target process
 var Message = Notepad.AllocString("Wow, I'm called in the target process from the Example!", true);
 var Title = Notepad.AllocString("This is a test", true);
 
-//Allows the process continues his startup
-Control.ResumeProcess();
 
 //If the target process don't have loaded the user32.dll, he will be automatically loaded!
 //int MessageBoxW(HWND hWnd, LPCWSTR lpText, LPCWSTR lpCaption, UINT uType);
@@ -46,6 +49,10 @@ switch (Rst.ToInt32()){
 		Console.WriteLine("CANCEL");
 		break;
 }
+
+//Allows the process continues his startup
+Control.UnlockEntryPoint();
+
 Console.WriteLine("Press any key to exit");
 Console.ReadKey();
 ```
@@ -61,24 +68,33 @@ public static void Inject(){
 RemoteControl Control = new RemoteControl("C:\\Windows\\System32\\Notepad.exe", out Process Notepad);
 //Wait the minimal process startup to the RemoteControl works
 Control.WaitInitialize();
-//Allows the process continues his startup
-Control.ResumeProcess();
+
+//Without this the RemoteControl can't invoke functions in the target process
+//Lock the entry point and remove the suspended state of the process 
+Control.LockEntryPoint();
 
 string CurrentAssembly = Assembly.GetExecutingAssembly().Location;
 string Message = "LOL, I'm a managed dll inside of the target process!";
 
+
 //If you have only one method like 'public static int XXXX(string Arg)' you don't need give the Injection EntryPoint
 int Ret = Control.CLRInvoke(CurrentAssembly, Message);
+
+
 //If you have more than one method like that, you need specify it
 //Since "EntryPoint" is inside the "Program" class, we use typeof(Program).FullName
-Ret = Control.CLRInvoke(CurrentAssembly, typeof(Program).FullName, "EntryPoint", Message);
+//int Ret = Control.CLRInvoke(CurrentAssembly, typeof(Program).FullName, "EntryPoint", Message);
+
+
+//Allows the process continues his startup
+Control.UnlockEntryPoint();
 }
 ```
 ![https://a.doko.moe/ikwzem.png](https://a.doko.moe/ikwzem.png)
 
 ### Extra
 
-[Unmanaged hooking from Managed Injected Assembly](https://github.com/marcussacana/StringReloads/blob/master/SRL/Hook/HookFX.cs)  
+[Hook DLL Exports from Managed Assembly](https://github.com/marcussacana/StringReloads/blob/master/SRL/Hook/HookFX.cs)  
 [PInvoke Tools](https://github.com/dahall/Vanara)
 
 

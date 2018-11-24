@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -6,6 +7,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
+using static VNX.Debugger;
 using static VNX.Imports;
 using static VNX.Tools;
 
@@ -18,6 +20,12 @@ namespace VNX {
         IntPtr ExecuteInDefaultAppDomain = IntPtr.Zero;
         IntPtr CLRRuntimeHost = IntPtr.Zero;
 
+
+        int OwnerThread = 0;
+        IntPtr MainThread;
+        List<LockInfo> Locks = new List<LockInfo>();
+        List<uint> RemoteThreads = new List<uint>();
+
         bool Debugging = false;
 
         public RemoteControl(Process Proc) {
@@ -26,6 +34,28 @@ namespace VNX {
 
             hProcess = OpenProcess(PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ, false, Proc.Id);
         }
+
+
+        /// <summary>
+        /// Create a new process suspended, call the <see cref="ResumeProcess"/> to begin the process execution
+        /// </summary>
+        /// <param name="Filename">Executable Path</param>
+        /// <param name="Arguments">Command Line Arguments</param>
+        /// <param name="CreatedProcess">The Created Process</param>
+        public RemoteControl(string Filename, out Process CreatedProcess, string Arguments = "") {
+            var PI = CreateProcessSuspended(Filename, Arguments);
+
+            hProcess = PI.hProcess;
+            Target = Process.GetProcessById(unchecked((int)PI.dwProcessId));
+            CreatedProcess = Target;
+            MainThread = PI.hThread;
+
+            x64Bits = Is64Bit(Target);
+            Debugging = true;
+
+            OwnerThread = Thread.CurrentThread.ManagedThreadId;
+        }
+
 
         /// <summary>
         /// Verify if you can use the <see cref="RemoteControl">RemoteLoader</see> with the target process
@@ -45,46 +75,81 @@ namespace VNX {
         public bool CLRAvaliable() => Target.LibraryLoaded("mscoree.dll");
 
         /// <summary>
-        /// Create a new process suspended, call the <see cref="ResumeProcess"/> to begin the process execution
+        /// Lock the EntryPoint Execution
         /// </summary>
-        /// <param name="Filename">Executable Path</param>
-        /// <param name="Arguments">Command Line Arguments</param>
-        /// <param name="CreatedProcess">The Created Process</param>
-        public RemoteControl(string Filename, out Process CreatedProcess, string Arguments = "") {
-            var PI = CreateProcessSuspended(Filename, Arguments);
-            hProcess = PI.hProcess;
-            Target = Process.GetProcessById(unchecked((int)PI.dwProcessId));
-            CreatedProcess = Target;
+        public void LockEntryPoint() {
+            SuspendThreads();
 
-            x64Bits = Is64Bit(Target);
-            Debugging = true;
+            byte[] LockerData = new byte[] { 0xEB, 0xFE };//Infinite Loop (jmp -2)
+            IntPtr LockAddress = Target.GetModuleEntryPoint(Target.GetMainModule());
+
+
+            Locks.Add(new LockInfo() {
+                Address = LockAddress,
+                Locker = LockerData,
+                Unlocker = Target.Read(LockAddress, (uint)LockerData.Length),
+                Target = Target
+            });
+
+
+            foreach (LockInfo Locker in Locks)
+                Locker.Install();
+
+            SetThreadPriority(MainThread, THREAD_PRIORITY.THREAD_PRIORITY_LOWEST);
+            ResumeProcess();
+        }
+
+        /// <summary>
+        /// Unlock the EntryPoint allowing his startup
+        /// </summary>
+        public void UnlockEntryPoint() {
+            SuspendThreads();
+
+            foreach (LockInfo Locker in Locks)
+                Locker.Uninstall();
+
+            Locks = new List<LockInfo>();
+            ResumeThreads();
         }
 
         /// <summary>
         /// If the process has created using the <see cref="RemoteControl"/> you need call this function to start the process
         /// </summary>
         public void ResumeProcess() {
-            Detach();
+            if (Debugging)
+                Detach();
             ResumeThreads();
         }
 
         /// <summary>
         /// Resume the target process if you have suspended it
         /// </summary>
-        public void ResumeThreads() {
+        /// <param name="SkipInjectedThreads">When true all threads of the process that isn't created by the <see cref="RemoteControl">RemoteControl</see> will be Resumed</param>
+        public void ResumeThreads(bool SkipInjectedThreads = true) {
             foreach (var Thread in Target.Threads.Cast<ProcessThread>()) {
-                var Handle = OpenThread(ThreadAccess.SUSPEND_RESUME, false, (uint)Thread.Id);
-                ResumeThread(Handle);
+                uint TID = (uint)Thread.Id;
+                var Handle = OpenThread(ThreadAccess.SUSPEND_RESUME, false, TID);
+                if (RemoteThreads.Contains(TID))
+                    continue;
+
+                while (ResumeThread(Handle) > 0)
+                    continue;
+
                 CloseHandle(Handle);
             }
         }
 
         /// <summary>
-        /// 
+        /// Suspend the target process if you have suspended it
         /// </summary>
-        public void SuspendThreads() {
+        /// <param name="SkipInjectedThreads">When true all threads of the process that isn't created by the <see cref="RemoteControl">RemoteControl</see> will be Suspended</param>
+        public void SuspendThreads(bool SkipInjectedThreads = true) {
             foreach (var Thread in Target.Threads.Cast<ProcessThread>()) {
-                var Handle = OpenThread(ThreadAccess.SUSPEND_RESUME, false, (uint)Thread.Id);
+                uint TID = (uint)Thread.Id;
+                var Handle = OpenThread(ThreadAccess.SUSPEND_RESUME, false, TID);
+                if (RemoteThreads.Contains(TID))
+                    continue;
+
                 SuspendThread(Handle);
                 CloseHandle(Handle);
             }
@@ -97,8 +162,15 @@ namespace VNX {
             if (Target.LibraryLoaded(Module))
                 return;
 
-            if (!Debugging)
+            if (MainThread == IntPtr.Zero)
                 throw new Exception("You need create the process with the RemoteLoader to wait an module load event");
+
+            if (!Debugging)
+                throw new Exception("You need call this function before the ResumeProcess or LockProcess");
+
+            if (OwnerThread != Thread.CurrentThread.ManagedThreadId)
+                throw new Exception("You need call this function using the same thread when you created this instance of the RemoteControl");
+
 
             new Thread(() => {
                 Thread.Sleep(100);
@@ -154,8 +226,8 @@ namespace VNX {
             IntPtr IID_ICLRRuntimeInfo  = Target.Alloc(new Guid("BD39D1D2-BA2F-486A-89B0-B4B0CB466891").ToByteArray());
             IntPtr IID_ICLRRuntimeHost  = Target.Alloc(new Guid("90F1A06C-7712-4762-86B5-7A5EBA6BDB02").ToByteArray());
 
-            MIntPtr<HResult> Result = Invoke("mscoree.dll", "CLRCreateInstance", CLSID_CLRMetaHost, IID_ICLRMetaHost, ICLRMetaHost);
-            if (Result.Parse() != HResult.S_OK)
+            HResult Result = (MIntPtr<HResult>)Invoke("mscoree.dll", "CLRCreateInstance", CLSID_CLRMetaHost, IID_ICLRMetaHost, ICLRMetaHost);
+            if (Result != HResult.S_OK)
                 throw new Exception($"Error: {Result.ToString()} (0x{((uint)Result).ToString("X8")})");
 
             byte[] Data = Target.Read(ICLRMetaHost, (uint)IntPtr.Size);
@@ -171,8 +243,8 @@ namespace VNX {
             IntPtr pVersion = Target.AllocString(DotNetVerName(FrameworkVersion.DotNet40), true);
 
 
-            Result = Invoke(GetRuntime, MetaHostIntance, pVersion, IID_ICLRRuntimeInfo, ICLRRuntimeInfo);
-            if (Result.Parse() != HResult.S_OK)
+            Result = (MIntPtr<HResult>)Invoke(GetRuntime, MetaHostIntance, pVersion, IID_ICLRRuntimeInfo, ICLRRuntimeInfo);
+            if (Result != HResult.S_OK)
                 throw new Exception($"Error: {Result.ToString()} (0x{((uint)Result).ToString("X8")})");
 
             Data = Target.Read(ICLRRuntimeInfo, (uint)IntPtr.Size);
@@ -185,8 +257,8 @@ namespace VNX {
             Data = Target.Read(GetInterface.Sum(IntPtr.Size * 9), (uint)IntPtr.Size);//6th Function + vTable Prefix
             GetInterface = Data.ToIntPtr(x64Bits);
 
-            Result = Invoke(GetInterface, RuntimeInfoInstance, CLSID_CLRRuntimeHost, IID_ICLRRuntimeHost, ICLRRuntimeHost);
-            if (Result.Parse() != HResult.S_OK)
+            Result = (MIntPtr<HResult>)Invoke(GetInterface, RuntimeInfoInstance, CLSID_CLRRuntimeHost, IID_ICLRRuntimeHost, ICLRRuntimeHost);
+            if (Result != HResult.S_OK)
                 throw new Exception($"Error: {Result.ToString()} (0x{((uint)Result).ToString("X8")})");
 
             Data = Target.Read(ICLRRuntimeHost, (uint)IntPtr.Size);
@@ -199,8 +271,8 @@ namespace VNX {
             Data = Target.Read(Start.Sum(IntPtr.Size * 3), (uint)IntPtr.Size);
             Start = Data.ToIntPtr(x64Bits);
 
-            Result = Invoke(Start, HostInstance);
-            if (Result.Parse() != HResult.S_OK)
+            Result = (MIntPtr<HResult>)Invoke(Start, HostInstance);
+            if (Result != HResult.S_OK)
                 throw new Exception($"Error: {Result.ToString()} (0x{((uint)Result).ToString("X8")})");
 
             Data = Target.Read(ICLRRuntimeHost, (uint)IntPtr.Size);
@@ -475,8 +547,18 @@ namespace VNX {
 
 
                 IntPtr Function = Target.Alloc(Stream.ToArray(), true);
-                IntPtr Thread = CreateRemoteThread(hProcess, IntPtr.Zero, 0, Function, IntPtr.Zero, 0, IntPtr.Zero);
-                ResumeThread(Thread);
+                IntPtr hThread = CreateRemoteThread(hProcess, IntPtr.Zero, 0, Function, IntPtr.Zero, 0, IntPtr.Zero);
+
+                uint TID = GetThreadId(hThread);
+                RemoteThreads.Add(TID);
+
+                while (ResumeThread(hThread) > 0) {
+                    GetExitCodeThread(hThread, out uint Status);
+                    if (Status != THREAD_STILL_ACTIVE)
+                        break;
+
+                    Thread.Sleep(10);
+                }
 
                 if (CatchReturn) {
                     IntPtr RetData = Function.Sum(Stream.Length - 5);
@@ -484,10 +566,10 @@ namespace VNX {
                     uint Status = 0;
                     byte[] Buffer = new byte[5];
                     while (true) {
-                        System.Threading.Thread.Sleep(10);
+                        Thread.Sleep(10);
                         Buffer = Target.Read(RetData, (uint)Buffer.LongLength);
                         if (Buffer[0] != 0x1) {
-                            GetExitCodeThread(Thread, out Status);
+                            GetExitCodeThread(hThread, out Status);
                             if (Status == THREAD_STILL_ACTIVE)
                                 continue;
                             else
@@ -497,8 +579,10 @@ namespace VNX {
                     }
 
                     do {
-                        GetExitCodeThread(Thread, out Status);
+                        GetExitCodeThread(hThread, out Status);
                     } while (Status == THREAD_STILL_ACTIVE);
+
+                    RemoteThreads.Remove(TID);
 
                     Target.Free(Function);
 
@@ -651,19 +735,29 @@ namespace VNX {
 
 
                 IntPtr Function = Target.Alloc(Stream.ToArray(), true);
-                IntPtr Thread = CreateRemoteThread(hProcess, IntPtr.Zero, 0, Function, IntPtr.Zero, 0, IntPtr.Zero);
-                ResumeThread(Thread);
+                IntPtr hThread = CreateRemoteThread(hProcess, IntPtr.Zero, 0, Function, IntPtr.Zero, 0, IntPtr.Zero);
+
+                uint TID = GetThreadId(hThread);
+                RemoteThreads.Add(TID);
+
+                while (ResumeThread(hThread) > 0) {
+                    GetExitCodeThread(hThread, out uint Status);
+                    if (Status != THREAD_STILL_ACTIVE)
+                        break;
+
+                    Thread.Sleep(10);
+                }
 
                 if (CatchReturn) {
                     IntPtr RetData = Function.Sum(Stream.Length - 9);
 
                     uint Status = 0;
                     byte[] Buffer = new byte[9];
-                    while (GetExitCodeThread(Thread, out Status)) {
+                    while (GetExitCodeThread(hThread, out Status)) {
                         if (Status != THREAD_STILL_ACTIVE)
                             break;
 
-                        System.Threading.Thread.Sleep(10);
+                        Thread.Sleep(10);
                         Buffer = Target.Read(RetData, (uint)Buffer.LongLength);
                         if (Buffer[0] != 0x1)
                             continue;
@@ -671,8 +765,10 @@ namespace VNX {
                     }
 
                     do {
-                        GetExitCodeThread(Thread, out Status);
+                        GetExitCodeThread(hThread, out Status);
                     } while (Status == THREAD_STILL_ACTIVE);
+
+                    RemoteThreads.Remove(TID);
 
                     Target.Free(Function);
 

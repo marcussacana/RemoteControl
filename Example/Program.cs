@@ -2,6 +2,8 @@
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Text;
+using System.Threading;
 using System.Windows.Forms;
 using VNX;
 
@@ -35,36 +37,60 @@ namespace Example {
 
             //If are you using an Any CPU build, you can use this to force run as 32bits to make your injection compatible
             if (File.Exists(AppDomain.CurrentDomain.BaseDirectory + "RunAsX86.exe") && !Process.Is64Bits() && !Compatible) {
+                Process.Kill();
                 Console.WriteLine("Restarting as x86...");
                 Process.Start(AppDomain.CurrentDomain.BaseDirectory + "RunAsX86.exe", $"\"{Application.ExecutablePath}\" \"{Exe}\"");
                 return;
             }
 
-            //Wait the target process load the minimum requeriment to the RemoteControl works
+            //Load the Minimal requeriment to the RemoteLoader works
             Control.WaitInitialize();
 
-            //Wait the target process load the specified dll
-            Control.WaitModuleLoad("user32.dll");
+            Console.WriteLine("What you want do?");
+            Console.WriteLine("1 - See the Sample Invoke");
+            Console.WriteLine("2 - See the Sample Managed Assembly Injection 1");
+            Console.WriteLine("3 - See the Sample Managed Assembly Injection 2");
+            Console.WriteLine("4 - See the Sample Modules Info");
+            Console.WriteLine("5 - See the Sample Read/Write in the target memory");
 
+            char R = Console.ReadKey().KeyChar;
+            Console.WriteLine();
 
-            //This is useless to the injection.
-            //Shows all loaded modules in the target process
-            var Modules = Process.GetAllModulesNames();
-            foreach (var Module in Modules) {
-                IntPtr Handler = Process.GetModuleByName(Module);
-                IntPtr EntryPoint = Process.GetModuleEntryPoint(Handler);
-                Console.WriteLine("Module Detected: " + Module);
-                Console.WriteLine($"Handler: {Handler.ToString("X16")} | EntryPoint: {EntryPoint.ToString("X16")}");
+            switch (R) {
+                case '1':
+                    SampleExportInvoke(Control, Process);
+                    break;
+                case '2':
+                    SampleManagedAssemblyInjection1(Control, Process);
+                    break;
+                case '3':
+                    SampleManagedAssemblyInjection2(Control, Process);
+                    break;
+                case '4':
+                    SampleModuleInfo(Control, Process);
+                    break;
+                case '5':
+                    SampleReadWrite(Control, Process);
+                    break;
             }
 
-            //Allow the target process resume the startup
-            Control.ResumeProcess();
+            Console.WriteLine("Press Any Key To Exit");
+            Console.ReadKey();
+        }
+
+        /// <summary>
+        /// Sample Invoke a DLL Export in the target process and catch the return data
+        /// </summary>
+        public static void SampleExportInvoke(RemoteControl Control, Process Process) {
+            //Lock the program in his entrypoint, Required to invoke methods or inject libraries
+            Control.LockEntryPoint();
 
             //Write the message and title in the target process memory
             var Message = Process.AllocString("Wow, I'm called in the target process from the Example!", true);
             var Title = Process.AllocString("This is a test", true);
 
-            //Invoke the "MessageBoxW" in the target process
+
+            //Invoke the "MessageBoxW" in the target process, if the user32.dll isn't loaded, he will be automatically loaded
             //int MessageBoxW(IntPtr hWnd, string glpText, string lpCaption, uint uType);
             var Rst = Control.Invoke("user32.dll", "MessageBoxW", IntPtr.Zero, Message, Title, new IntPtr(0x20 | 0x04));//0x20 = MB_ICONQUESTION, 0x04 = MB_YESNO
 
@@ -86,8 +112,18 @@ namespace Example {
                     break;
             }
 
+            //Allow the program startup continue
+            Control.UnlockEntryPoint();
+        }
 
-            //Here is an example how to inject a Managed Assembly in the process
+        /// <summary>
+        /// Inject a Managed Assembly when the assembly have more than one entry point
+        /// </summary>
+        public static void SampleManagedAssemblyInjection1(RemoteControl Control, Process Process) {
+            //Lock the program in his entrypoint, Required to invoke methods or inject libraries
+            Control.LockEntryPoint();
+
+            //Get Current Assembly Path
             string CurrentAssembly = Assembly.GetExecutingAssembly().Location;
 
             //If you have more than one method like that, you need specify it
@@ -96,8 +132,113 @@ namespace Example {
 
             //Show the managed assembly returned data
             Console.WriteLine("Returned: 0x" + Ret.ToString("X4"));
-            Console.WriteLine("Press Any Key To Exit");
-            Console.ReadKey();
+
+
+            //Allow the program startup continue
+            Control.UnlockEntryPoint();
+        }
+
+        /// <summary>
+        /// Inject the managed assembly when only have a single valid entrypoint
+        /// </summary>
+        public static void SampleManagedAssemblyInjection2(RemoteControl Control, Process Process) {
+            //Get Current Assembly Path
+            string CurrentAssembly = Assembly.GetExecutingAssembly().Location;
+
+            //If you have more than one method like that, you need specify it
+            //If you only have one valid entrypoint to the injector, you don't need specifiy it 
+            int Ret = Control.CLRInvoke(CurrentAssembly, "LOL, I'm a managed dll inside of the target process!");
+
+            //Show the managed assembly returned data
+            Console.WriteLine("Returned: 0x" + Ret.ToString("X4"));
+
+
+            //Allow the program startup continue
+            Control.UnlockEntryPoint();
+        }
+
+        /// <summary>
+        /// Shows all modules in the target process
+        /// </summary>
+        public static void SampleModuleInfo(RemoteControl Control, Process Process) {
+            //Remove the "SUSPENDED" state of the process
+            Control.ResumeProcess();
+
+            //Wait the main window open
+            while (Process.MainWindowHandle == IntPtr.Zero)
+                Thread.Sleep(100);
+
+            //Log all modules
+            var Modules = Process.GetAllModules();
+            foreach (var Module in Modules) {
+                bool Main = Module == Process.GetMainModule();
+                if (Main)
+                    Console.Write("Main ");
+
+                string Parse = Process.Is64Bits() ? "X16" : "X8";
+
+                Console.WriteLine("Module:" + (Main ? "\t" : "\t\t" ) + Process.GetModuleNameByHandler(Module));
+                Console.WriteLine("Handler:\t0x" + Module.ToString(Parse));
+                Console.WriteLine("EntryPoint:\t0x" + Process.GetModuleEntryPoint(Module).ToString(Parse));
+                Console.WriteLine();
+            }
+        }
+
+        /// <summary>
+        /// Read or Write data in the target process memory
+        /// </summary>
+        public static void SampleReadWrite(RemoteControl Control, Process Process) {
+            //Remove the "SUSPENDED" state of the process
+            Control.ResumeProcess();
+
+            //Wait the main window open
+            while (Process.MainWindowHandle == IntPtr.Zero)
+                Thread.Sleep(100);
+
+
+            bool? Read = null;
+            while (Read == null) {
+                Console.WriteLine("Type R to Read or W to Write");
+                switch (Console.ReadKey().KeyChar) {
+                    case 'R':
+                    case 'r':
+                        Read = true;
+                        break;
+                    case 'W':
+                    case 'w':
+                        Read = false;
+                        break;
+                }
+                Console.WriteLine();
+            }
+
+            Console.WriteLine("Type the absolute address (in Hex)");
+            string Reply = Console.ReadLine().ToUpper().Replace("0X", "");
+            long Addr = Convert.ToInt64(Reply, 16);
+            
+            if (Read.Value) {
+                Console.WriteLine("How many bytes you want read?");
+                uint Count = uint.Parse(Console.ReadLine());
+
+                //Here is where the magic occours
+                byte[] Buffer = Process.Read(new IntPtr(Addr), Count);
+
+                Console.Write("0x");
+                foreach (byte Byte in Buffer){
+                    Console.Write(Byte.ToString("X2"));
+                }
+
+                Console.WriteLine();
+            } else {
+                Console.WriteLine("What you want write? (a string)");
+                byte[] Buffer = Encoding.UTF8.GetBytes(Console.ReadLine());
+
+
+                //Here is where the magic occours
+                Process.Write(new IntPtr(Addr), Buffer);
+
+                Console.WriteLine("Writed...");
+            }
         }
     }
 }
