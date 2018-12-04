@@ -4,8 +4,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading;
 using static VNX.Debugger;
 using static VNX.Imports;
@@ -109,6 +107,8 @@ namespace VNX {
                 Locker.Uninstall();
 
             Locks = new List<LockInfo>();
+
+            SetThreadPriority(MainThread, THREAD_PRIORITY.THREAD_PRIORITY_NORMAL);
             ResumeThreads();
         }
 
@@ -283,6 +283,14 @@ namespace VNX {
             Data = Target.Read(ExecuteInDefaultAppDomain.Sum(IntPtr.Size * 11), (uint)IntPtr.Size);
             ExecuteInDefaultAppDomain = Data.ToIntPtr(x64Bits);
 
+
+            Target.Free(ICLRMetaHost);
+            Target.Free(ICLRRuntimeInfo);
+            Target.Free(ICLRRuntimeHost);
+            Target.Free(CLSID_CLRMetaHost);
+            Target.Free(CLSID_CLRRuntimeHost);
+            Target.Free(IID_ICLRMetaHost);
+            Target.Free(IID_ICLRRuntimeHost);
         }
 
         /// <summary>
