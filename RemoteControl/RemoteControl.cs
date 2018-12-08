@@ -89,9 +89,11 @@ namespace VNX {
                 Target = Target
             });
 
-
-            foreach (LockInfo Locker in Locks)
+            foreach (LockInfo Locker in Locks) {
                 Locker.Install();
+                if (!Locker.IsInstalled())
+                    throw new Exception("Failed to lock the entrypoint...");
+            }
 
             SetThreadPriority(MainThread, THREAD_PRIORITY.THREAD_PRIORITY_LOWEST);
             ResumeProcess();
@@ -103,8 +105,12 @@ namespace VNX {
         public void UnlockEntryPoint() {
             SuspendThreads();
 
-            foreach (LockInfo Locker in Locks)
+            foreach (LockInfo Locker in Locks) {
                 Locker.Uninstall();
+                if (Locker.IsInstalled())
+                    throw new Exception("Failed to unlock the entrypoint...");
+            }
+
 
             Locks = new List<LockInfo>();
 

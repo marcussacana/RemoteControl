@@ -48,6 +48,16 @@ namespace VNX {
         public static void Install(this LockInfo Locker) => Locker.Target.Write(Locker.Address, Locker.Locker);
         public static void Uninstall(this LockInfo Locker) => Locker.Target.Write(Locker.Address, Locker.Unlocker);
 
+        public static bool IsInstalled(this LockInfo Locker) {
+            byte[] Memory = Locker.Target.Read(Locker.Address, (uint)Locker.Locker.Length);
+            bool Locked = true;
+            for (int i = 0; i < Locker.Locker.Length; i++)
+                if (Memory[i] != Locker.Locker[i])
+                    Locked = false;
+
+            return Locked;
+        }
+
         public static T[] Append<T>(this T[] Ori, T[] New) => Ori.Concat(New).ToArray();
 
     }
