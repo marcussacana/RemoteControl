@@ -30,7 +30,7 @@ namespace Example {
             //Ensure the target process is compatible with this build of the example
             bool Compatible = Control.IsCompatibleProcess();
 
-            
+
             Console.WriteLine(Process.Is64Bits() ? "x64 Detected" : "x86 Detected");
             Console.WriteLine($"The process {(Compatible ? "is" : "isn't")} compatible with this build of the Example");
 
@@ -52,6 +52,7 @@ namespace Example {
             Console.WriteLine("3 - See the Sample Managed Assembly Injection 2");
             Console.WriteLine("4 - See the Sample Modules Info");
             Console.WriteLine("5 - See the Sample Read/Write in the target memory");
+            Console.WriteLine("6 - See the Sample Auto-Alloc in the target memory");
 
             char R = Console.ReadKey().KeyChar;
             Console.WriteLine();
@@ -72,6 +73,9 @@ namespace Example {
                 case '5':
                     SampleReadWrite(Control, Process);
                     break;
+                case '6':
+                    SampleMAlloc(Control, Process);
+                    break;
             }
 
             Console.WriteLine("Press Any Key To Exit");
@@ -86,8 +90,8 @@ namespace Example {
             Control.LockEntryPoint();
 
             //Write the message and title in the target process memory
-            var Message = Process.AllocString("Wow, I'm called in the target process from the Example!", true);
-            var Title = Process.AllocString("This is a test", true);
+            var Message = Process.MAllocString("Wow, I'm called in the target process from the Example!", true);
+            var Title = Process.MAllocString("This is a test", true);
 
 
             //Invoke the "MessageBoxW" in the target process, if the user32.dll isn't loaded, he will be automatically loaded
@@ -95,8 +99,8 @@ namespace Example {
             var Rst = Control.Invoke("user32.dll", "MessageBoxW", IntPtr.Zero, Message, Title, new IntPtr(0x20 | 0x04));//0x20 = MB_ICONQUESTION, 0x04 = MB_YESNO
 
             //Release the Message and Title from the target process memory
-            Process.Free(Message);
-            Process.Free(Title);
+            Process.MFree(Message);
+            Process.MFree(Title);
 
             //Shows the MessageBoxW Clicked Button
             Console.Write("MSG Reply: ");
@@ -177,7 +181,7 @@ namespace Example {
 
                 string Parse = Process.Is64Bits() ? "X16" : "X8";
 
-                Console.WriteLine("Module:" + (Main ? "\t" : "\t\t" ) + Process.GetModuleNameByHandler(Module));
+                Console.WriteLine("Module:" + (Main ? "\t" : "\t\t") + Process.GetModuleNameByHandler(Module));
                 Console.WriteLine("Handler:\t0x" + Module.ToString(Parse));
                 Console.WriteLine("EntryPoint:\t0x" + Process.GetModuleEntryPoint(Module).ToString(Parse));
                 Console.WriteLine();
@@ -215,7 +219,7 @@ namespace Example {
             Console.WriteLine("Type the absolute address (in Hex)");
             string Reply = Console.ReadLine().ToUpper().Replace("0X", "");
             long Addr = Convert.ToInt64(Reply, 16);
-            
+
             if (Read.Value) {
                 Console.WriteLine("How many bytes you want read?");
                 uint Count = uint.Parse(Console.ReadLine());
@@ -224,7 +228,7 @@ namespace Example {
                 byte[] Buffer = Process.Read(new IntPtr(Addr), Count);
 
                 Console.Write("0x");
-                foreach (byte Byte in Buffer){
+                foreach (byte Byte in Buffer) {
                     Console.Write(Byte.ToString("X2"));
                 }
 
@@ -239,6 +243,37 @@ namespace Example {
 
                 Console.WriteLine("Writed...");
             }
+        }
+
+        public static void SampleMAlloc(RemoteControl Control, Process Process) {
+            //Remove the "SUSPENDED" state of the process
+            Control.ResumeProcess();
+
+            const string Message = "This is a test of the auto memory allocator of the RemoteProcess library, This string is big as try to fill the 10mb of space with less calls... Well, let's see how this will works, are you ready?";
+            string Parse = Process.Is64Bits() ? "X16" : "X8";
+            byte[] Data = Encoding.Unicode.GetBytes(Message + "\x0");
+
+            Console.WriteLine("Writing");
+
+            //Allocate 100x
+            IntPtr[] Address = new IntPtr[100];
+            for (uint i = 0; i < Address.Length; i++)
+                Address[i] = Process.MAlloc(Data);
+
+            Console.WriteLine("Validating...");
+            for (uint i = 0; i < Address.Length; i++) {
+                string Content = Process.ReadString(Address[i], true);
+                if (Content != Message)
+                    Console.WriteLine("Validation Failed at 0x"+ Address[i].ToString(Parse));
+            }
+
+            Console.WriteLine("Disposing...");
+
+            //Release all 100 address
+            for (uint i = 0; i < Address.Length; i++)
+                Process.MFree(Address[i]);
+
+            Console.WriteLine("Finished");
         }
     }
 }

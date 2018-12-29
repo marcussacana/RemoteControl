@@ -222,15 +222,15 @@ namespace VNX {
             if (CLRAvaliable())
                 throw new Exception("The target process already have loaded the CLR");
 
-            IntPtr ICLRMetaHost    = Target.Alloc(new byte[IntPtr.Size]);//http://source.roslyn.codeplex.com/#Microsoft.CodeAnalysis/Interop/IClrMetaHost.cs
-            IntPtr ICLRRuntimeInfo = Target.Alloc(new byte[IntPtr.Size]);//http://source.roslyn.codeplex.com/#microsoft.codeanalysis/Interop/IClrRuntimeInfo.cs,485a48c96d61baeb,references
-            IntPtr ICLRRuntimeHost = Target.Alloc(new byte[IntPtr.Size]);//https://github.com/CentroEPiaggio/SoftLEGS-Project/blob/5b2eb55b8f43f07189118e477bd4e5c0114f6c8e/casadi-matlabR2013a-v3.1.1/casadi/jit/mingw/mscoree.h#L1230
+            IntPtr ICLRMetaHost    = Target.MAlloc(new byte[IntPtr.Size]);//http://source.roslyn.codeplex.com/#Microsoft.CodeAnalysis/Interop/IClrMetaHost.cs
+            IntPtr ICLRRuntimeInfo = Target.MAlloc(new byte[IntPtr.Size]);//http://source.roslyn.codeplex.com/#microsoft.codeanalysis/Interop/IClrRuntimeInfo.cs,485a48c96d61baeb,references
+            IntPtr ICLRRuntimeHost = Target.MAlloc(new byte[IntPtr.Size]);//https://github.com/CentroEPiaggio/SoftLEGS-Project/blob/5b2eb55b8f43f07189118e477bd4e5c0114f6c8e/casadi-matlabR2013a-v3.1.1/casadi/jit/mingw/mscoree.h#L1230
 
-            IntPtr CLSID_CLRMetaHost    = Target.Alloc(new Guid("9280188D-0E8E-4867-B30C-7FA83884E8DE").ToByteArray());
-            IntPtr CLSID_CLRRuntimeHost = Target.Alloc(new Guid("90F1A06E-7712-4762-86B5-7A5EBA6BDB02").ToByteArray());
-            IntPtr IID_ICLRMetaHost     = Target.Alloc(new Guid("D332DB9E-B9B3-4125-8207-A14884F53216").ToByteArray());
-            IntPtr IID_ICLRRuntimeInfo  = Target.Alloc(new Guid("BD39D1D2-BA2F-486A-89B0-B4B0CB466891").ToByteArray());
-            IntPtr IID_ICLRRuntimeHost  = Target.Alloc(new Guid("90F1A06C-7712-4762-86B5-7A5EBA6BDB02").ToByteArray());
+            IntPtr CLSID_CLRMetaHost    = Target.MAlloc(new Guid("9280188D-0E8E-4867-B30C-7FA83884E8DE").ToByteArray());
+            IntPtr CLSID_CLRRuntimeHost = Target.MAlloc(new Guid("90F1A06E-7712-4762-86B5-7A5EBA6BDB02").ToByteArray());
+            IntPtr IID_ICLRMetaHost     = Target.MAlloc(new Guid("D332DB9E-B9B3-4125-8207-A14884F53216").ToByteArray());
+            IntPtr IID_ICLRRuntimeInfo  = Target.MAlloc(new Guid("BD39D1D2-BA2F-486A-89B0-B4B0CB466891").ToByteArray());
+            IntPtr IID_ICLRRuntimeHost  = Target.MAlloc(new Guid("90F1A06C-7712-4762-86B5-7A5EBA6BDB02").ToByteArray());
 
             HResult Result = (MIntPtr<HResult>)Invoke("mscoree.dll", "CLRCreateInstance", CLSID_CLRMetaHost, IID_ICLRMetaHost, ICLRMetaHost);
             if (Result != HResult.S_OK)
@@ -246,7 +246,7 @@ namespace VNX {
             Data = Target.Read(GetRuntime, (uint)IntPtr.Size);
             GetRuntime = Data.ToIntPtr(x64Bits);
 
-            IntPtr pVersion = Target.AllocString(DotNetVerName(FrameworkVersion.DotNet40), true);
+            IntPtr pVersion = Target.MAllocString(DotNetVerName(FrameworkVersion.DotNet40), true);
 
 
             Result = (MIntPtr<HResult>)Invoke(GetRuntime, MetaHostIntance, pVersion, IID_ICLRRuntimeInfo, ICLRRuntimeInfo);
@@ -290,13 +290,14 @@ namespace VNX {
             ExecuteInDefaultAppDomain = Data.ToIntPtr(x64Bits);
 
 
-            Target.Free(ICLRMetaHost);
-            Target.Free(ICLRRuntimeInfo);
-            Target.Free(ICLRRuntimeHost);
-            Target.Free(CLSID_CLRMetaHost);
-            Target.Free(CLSID_CLRRuntimeHost);
-            Target.Free(IID_ICLRMetaHost);
-            Target.Free(IID_ICLRRuntimeHost);
+            Target.MFree(ICLRMetaHost);
+            Target.MFree(ICLRRuntimeInfo);
+            Target.MFree(ICLRRuntimeHost);
+            Target.MFree(CLSID_CLRMetaHost);
+            Target.MFree(CLSID_CLRRuntimeHost);
+            Target.MFree(IID_ICLRMetaHost);
+            Target.MFree(IID_ICLRRuntimeHost);
+            Target.MFree(pVersion);
         }
 
         /// <summary>
@@ -312,12 +313,12 @@ namespace VNX {
             if (!(MIntPtr)ExecuteInDefaultAppDomain)
                 StartCLR();
 
-            IntPtr Ret = Target.Alloc(new byte[4]);
+            IntPtr Ret = Target.MAlloc(new byte[4]);
 
-            IntPtr AsmPath = Target.AllocString(AssemblyPath, true);
-            IntPtr TpName = Target.AllocString(TypeName, true);
-            IntPtr MthdName = Target.AllocString(MethodName, true);
-            IntPtr Arg = Target.AllocString(Argument, true);
+            IntPtr AsmPath = Target.MAllocString(AssemblyPath, true);
+            IntPtr TpName = Target.MAllocString(TypeName, true);
+            IntPtr MthdName = Target.MAllocString(MethodName, true);
+            IntPtr Arg = Target.MAllocString(Argument, true);
 
             HResult Failed = (MIntPtr<HResult>)Invoke(ExecuteInDefaultAppDomain, CLRRuntimeHost, AsmPath, TpName, MthdName, Arg, Ret);
             switch (Failed) {
@@ -328,11 +329,11 @@ namespace VNX {
             }
             int Result = Target.Read(Ret, 4).ToInt32();
 
-            Target.Free(AsmPath);
-            Target.Free(TpName);
-            Target.Free(MthdName);
-            Target.Free(Arg);
-            Target.Free(Ret);
+            Target.MFree(AsmPath);
+            Target.MFree(TpName);
+            Target.MFree(MthdName);
+            Target.MFree(Arg);
+            Target.MFree(Ret);
 
             return Result;
         }
@@ -385,9 +386,9 @@ namespace VNX {
         /// <param name="Library">Library Name or Path</param>
         /// <returns>The Module Handler</returns>
         public IntPtr LoadLibrary(string Library) {
-            IntPtr ModuleName = Target.AllocString(Library, true);
+            IntPtr ModuleName = Target.MAllocString(Library, true);
             IntPtr Result = Invoke("kernel32.dll", "LoadLibraryW", ModuleName);
-            Target.Free(ModuleName);
+            Target.MFree(ModuleName);
             return Result;
         }
 
@@ -473,14 +474,14 @@ namespace VNX {
 
             IntPtr GetModuleHld = GetRemoteProcAddress("kernel32.dll", "GetModuleHandleW");
             IntPtr GetProcAddr = GetRemoteProcAddress("kernel32.dll", "GetProcAddress");
-            IntPtr ModuleName = Target.AllocString(Path.GetFileName(Module), true);
-            IntPtr FuncName = Target.AllocString(Function, false);
+            IntPtr ModuleName = Target.MAllocString(Path.GetFileName(Module), true);
+            IntPtr FuncName = Target.MAllocString(Function, false);
 
             IntPtr hModule = Invoke(GetModuleHld, ModuleName);
             IntPtr Result = Invoke(GetProcAddr, hModule, FuncName);
 
-            bool Sucess = Target.Free(ModuleName);
-            Sucess = Target.Free(FuncName);
+            Target.MFree(ModuleName);
+            Target.MFree(FuncName);
 
             return Result;
         }
@@ -560,7 +561,7 @@ namespace VNX {
                     Stream.Write(Command, 0, Command.Length);
 
 
-                IntPtr Function = Target.Alloc(Stream.ToArray(), true);
+                IntPtr Function = Target.MAlloc(Stream.ToArray(), true);
                 IntPtr hThread = CreateRemoteThread(hProcess, IntPtr.Zero, 0, Function, IntPtr.Zero, 0, IntPtr.Zero);
 
                 uint TID = GetThreadId(hThread);
@@ -598,7 +599,7 @@ namespace VNX {
 
                     RemoteThreads.Remove(TID);
 
-                    Target.Free(Function);
+                    Target.MFree(Function);
 
                     return BitConverter.ToUInt32(Buffer, 1).ToIntPtr();
                 } else
@@ -748,7 +749,7 @@ namespace VNX {
                     Stream.Write(Command, 0, Command.Length);
 
 
-                IntPtr Function = Target.Alloc(Stream.ToArray(), true);
+                IntPtr Function = Target.MAlloc(Stream.ToArray(), true);
                 IntPtr hThread = CreateRemoteThread(hProcess, IntPtr.Zero, 0, Function, IntPtr.Zero, 0, IntPtr.Zero);
 
                 uint TID = GetThreadId(hThread);
@@ -784,7 +785,7 @@ namespace VNX {
 
                     RemoteThreads.Remove(TID);
 
-                    Target.Free(Function);
+                    Target.MFree(Function);
 
                     return BitConverter.ToUInt64(Buffer, 1).ToIntPtr();
                 } else

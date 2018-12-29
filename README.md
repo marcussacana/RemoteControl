@@ -28,8 +28,8 @@ Control.LockEntryPoint();
 
 
 //Alloc the string in target process
-var Message = Notepad.AllocString("Wow, I'm called in the target process from the Example!", true);
-var Title = Notepad.AllocString("This is a test", true);
+var Message = Notepad.MAllocString("Wow, I'm called in the target process from the Example!", true);
+var Title = Notepad.MAllocString("This is a test", true);
 
 
 //If the target process don't have loaded the user32.dll, he will be automatically loaded!
@@ -49,6 +49,10 @@ switch (Rst.ToInt32()){
 		Console.WriteLine("CANCEL");
 		break;
 }
+
+//Dispose the allocated string
+Notepad.MFree(Message);
+Notepad.MFree(Title);
 
 //Allows the process continues his startup
 Control.UnlockEntryPoint();

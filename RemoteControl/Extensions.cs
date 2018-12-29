@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -138,13 +137,23 @@ namespace VNX {
 
 
         /// <summary>
-        /// Alloc an null-terminated <paramref name="String"/> in the target process memory
+        /// Alloc an null-terminated <paramref name="String"/> in the target process memory using a new region
         /// </summary>
         /// <param name="Process">The Process to alloc the data</param>
         /// <param name="String">The string to alloc</param>
         /// <param name="Unicode">Switch bettewen Unicode or ANSI encoding</param>
         /// <returns>The pointer to the string</returns>
+        [Obsolete("Please use MAllocString instead.")]
         public static IntPtr AllocString(this Process Process, string String, bool Unicode) => Tools.AllocString(Process.Handle, String, Unicode);
+
+        /// <summary>
+        /// Automatically Alloc an null-terminated <paramref name="String"/> in the target process memory
+        /// </summary>
+        /// <param name="Process">The Process to alloc the data</param>
+        /// <param name="String">The string to alloc</param>
+        /// <param name="Unicode">Switch bettewen Unicode or ANSI encoding</param>
+        /// <returns>The pointer to the string</returns>
+        public static IntPtr MAllocString(this Process Process, string String, bool Unicode) => Tools.MAllocString(Process, String, Unicode);
 
 
         /// <summary>
@@ -157,13 +166,21 @@ namespace VNX {
         public static string ReadString(this Process Process, IntPtr Address, bool Unicode) => Tools.ReadString(Process.Handle, Address, Unicode);
 
         /// <summary>
-        /// Alloc the <paramref name="Content"/> to the target process
+        /// Alloc the <paramref name="Content"/> to the target process into a new region
         /// </summary>
         /// <param name="Content">The content to alloc</param>
         /// <param name="Executable">Make this allocated content executable</param>
         /// <returns>The pointer to the allocated content</returns>
         public static IntPtr Alloc(this Process Process, byte[] Content, bool Executable = false) => Tools.Alloc(Process.Handle, Content, Executable);
-        
+
+        /// <summary>
+        /// Automatically Alloc the <paramref name="Content"/> to the target process
+        /// </summary>
+        /// <param name="Content">The content to alloc</param>
+        /// <param name="Executable">Make this allocated content executable</param>
+        /// <returns>The pointer to the allocated content</returns>
+        public static IntPtr MAlloc(this Process Process, byte[] Content, bool Executable = false) => MemoryManagement.MAlloc(Process, Content, Executable);
+
 
         /// <summary>
         /// Write bytes in the target process memory
@@ -193,6 +210,14 @@ namespace VNX {
         /// <param name="Length">The length to be released</param>
         /// <returns>Return true if sucess</returns>
         public static bool Free(this Process Process, IntPtr Address, uint Length = 0) => Tools.Free(Process.Handle, Address, Length);
+
+        /// <summary>
+        /// Free a allocated content that has allocated by the MAlloc
+        /// </summary>v
+        /// <param name="Process">The process to release the content</param>
+        /// <param name="Address">The address of the content to be released</param>
+        /// <param name="Length">The length to be released</param>
+        public static void MFree(this Process Process, IntPtr Address) => MemoryManagement.MFree(Process, Address);
 
 
         /// <summary>

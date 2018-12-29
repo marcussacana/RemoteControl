@@ -198,6 +198,14 @@ namespace VNX {
             return Alloc(hProcess, Enco.GetBytes(String + "\x0"));
         }
 
+        public static IntPtr MAllocString(Process Target, string String, bool Unicode) {
+            if (String == null)
+                return IntPtr.Zero;
+
+            var Enco = Unicode ? Encoding.Unicode : Encoding.Default;
+            return MemoryManagement.MAlloc(Target, Enco.GetBytes(String + "\x0"));
+        }
+
         public static IntPtr Alloc(IntPtr hProcess, byte[] Content, bool Executable = false) {
             IntPtr Ptr = VirtualAllocEx(hProcess, IntPtr.Zero, (uint)Content.LongLength, AllocationType.Commit | AllocationType.Reserve, Executable ? ProtectionType.PAGE_EXECUTE_READWRITE : ProtectionType.PAGE_READWRITE);
             if (!Write(hProcess, Ptr, Content))
@@ -205,10 +213,18 @@ namespace VNX {
             return Ptr;
         }
 
-        public static bool Write(IntPtr hProcess, IntPtr Address, byte[] Content) {
+        public static IntPtr Alloc(IntPtr hProcess, uint Size, bool Executable = false) {
+            return VirtualAllocEx(hProcess, IntPtr.Zero, Size, AllocationType.Commit | AllocationType.Reserve, Executable ? ProtectionType.PAGE_EXECUTE_READWRITE : ProtectionType.PAGE_READWRITE);
+        }
+
+        public static bool Write(IntPtr hProcess, IntPtr Address, byte[] Content, ProtectionType? NewProtection = null) {
             ChangeProtection(hProcess, Address, (uint)Content.LongLength, ProtectionType.PAGE_READWRITE, out ProtectionType Original);
             WriteProcessMemory(hProcess, Address, Content, (uint)Content.LongLength, out uint Saved);
-            ChangeProtection(hProcess, Address, (uint)Content.LongLength, Original);
+
+            if (NewProtection.HasValue)
+                ChangeProtection(hProcess, Address, (uint)Content.LongLength, NewProtection.Value);
+            else
+                ChangeProtection(hProcess, Address, (uint)Content.LongLength, Original);
 
             if (Saved != Content.Length)
                 return false;
@@ -229,17 +245,18 @@ namespace VNX {
         public static string ReadString(IntPtr hProcess, IntPtr Address, bool Unicode) {
             List<byte> Buffer = new List<byte>();
             IntPtr CPos = Address;
-            bool Continue = true;
             do {
                 byte[] Char = Read(hProcess, CPos, Unicode ? 2u : 1u);
-                Buffer.AddRange(Char);
                 if (Unicode && Char[0] == 0x00 && Char[1] == 0x00)
-                    Continue = false;
+                    break;
                 if (!Unicode && Char[0] == 0x00)
-                    Continue = false;
+                    break;
+
+
+                Buffer.AddRange(Char);
 
                 CPos = CPos.Sum(Unicode ? 2u : 1u);
-            } while (Continue);
+            } while (true);
 
             return Unicode ? Encoding.Unicode.GetString(Buffer.ToArray()) : Encoding.Default.GetString(Buffer.ToArray());
         }
