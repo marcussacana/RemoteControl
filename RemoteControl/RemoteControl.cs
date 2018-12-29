@@ -25,6 +25,7 @@ namespace VNX {
         List<uint> RemoteThreads = new List<uint>();
 
         bool Debugging = false;
+        bool IsManaged = false;
 
         public RemoteControl(Process Proc) {
             Target = Proc;
@@ -49,9 +50,11 @@ namespace VNX {
             MainThread = PI.hThread;
 
             x64Bits = Is64Bit(Target);
+            IsManaged = Tools.IsManaged(Filename);
             Debugging = true;
 
             OwnerThread = Thread.CurrentThread.ManagedThreadId;
+
         }
 
 
@@ -76,6 +79,10 @@ namespace VNX {
         /// Lock the EntryPoint Execution
         /// </summary>
         public void LockEntryPoint() {
+            if (IsManaged) {
+                throw new Exception("The entry point locker isn't compatible with managed targets, use the WaitCLR instead.");
+            }
+
             SuspendThreads();
 
             byte[] LockerData = new byte[] { 0xEB, 0xFE };//Infinite Loop (jmp -2)
@@ -172,7 +179,7 @@ namespace VNX {
                 throw new Exception("You need create the process with the RemoteLoader to wait an module load event");
 
             if (!Debugging)
-                throw new Exception("You need call this function before the ResumeProcess or LockProcess");
+                throw new Exception("You need call this function before the ResumeProcess or LockEntryPoint");
 
             if (OwnerThread != Thread.CurrentThread.ManagedThreadId)
                 throw new Exception("You need call this function using the same thread when you created this instance of the RemoteControl");
@@ -188,6 +195,43 @@ namespace VNX {
                 switch (Event.dwDebugEventCode) {
                     case DebugEvent.LOAD_DLL_DEBUG_EVENT:
                         Loaded = Target.LibraryLoaded(Module);
+                        break;
+                }
+                ContinueDebugEvent(Event.dwProcessId, Event.dwThreadId, DEBUG_CONTINUE.DBG_CONTINUE);
+            }
+            SuspendThreads();
+        }
+
+        /// <summary>
+        /// Wait the target process load the CLR
+        /// </summary>
+        public void WaitCLR() {
+            if (!IsManaged)
+                throw new Exception("The target process isn't an managed assembly");
+
+            WaitInitialize();
+
+            if (MainThread == IntPtr.Zero)
+                throw new Exception("You need create the process with the RemoteLoader to wait an module load event");
+
+            if (!Debugging)
+                throw new Exception("You need call this function before the ResumeProcess or LockEntryPoint");
+
+            if (OwnerThread != Thread.CurrentThread.ManagedThreadId)
+                throw new Exception("You need call this function using the same thread when you created this instance of the RemoteControl");
+
+
+            new Thread(() => {
+                Thread.Sleep(100);
+                ResumeThreads();
+            }).Start();
+
+            bool Loaded = false;
+            while (!Loaded && WaitForDebugEvent(out DEBUG_EVENT Event, INFINITE)) {
+                switch (Event.dwDebugEventCode) {
+                    case DebugEvent.EXCEPTION_DEBUG_EVENT:
+                        if (CLRAvaliable())
+                            Loaded = true;                        
                         break;
                 }
                 ContinueDebugEvent(Event.dwProcessId, Event.dwThreadId, DEBUG_CONTINUE.DBG_CONTINUE);
@@ -219,7 +263,9 @@ namespace VNX {
             if (Debugging)
                 WaitInitialize();
 
-            if (CLRAvaliable())
+            if (IsManaged) {
+                ResumeProcess();
+            } else if (CLRAvaliable())
                 throw new Exception("The target process already have loaded the CLR");
 
             IntPtr ICLRMetaHost    = Target.MAlloc(new byte[IntPtr.Size]);//http://source.roslyn.codeplex.com/#Microsoft.CodeAnalysis/Interop/IClrMetaHost.cs
@@ -274,6 +320,22 @@ namespace VNX {
             Data = Target.Read(Start, (uint)IntPtr.Size);
             Start = Data.ToIntPtr(x64Bits);
 
+            if (IsManaged) {
+                Data = Target.Read(Start.Sum(IntPtr.Size * 11), (uint)IntPtr.Size);
+                ExecuteInDefaultAppDomain = Data.ToIntPtr(x64Bits);
+
+                Target.MFree(ICLRMetaHost);
+                Target.MFree(ICLRRuntimeInfo);
+                Target.MFree(ICLRRuntimeHost);
+                Target.MFree(CLSID_CLRMetaHost);
+                Target.MFree(CLSID_CLRRuntimeHost);
+                Target.MFree(IID_ICLRMetaHost);
+                Target.MFree(IID_ICLRRuntimeHost);
+                Target.MFree(pVersion);
+
+                return;
+            }
+
             Data = Target.Read(Start.Sum(IntPtr.Size * 3), (uint)IntPtr.Size);
             Start = Data.ToIntPtr(x64Bits);
 
@@ -287,8 +349,7 @@ namespace VNX {
             Data = Target.Read(ExecuteInDefaultAppDomain, (uint)IntPtr.Size);
             ExecuteInDefaultAppDomain = Data.ToIntPtr(x64Bits);
             Data = Target.Read(ExecuteInDefaultAppDomain.Sum(IntPtr.Size * 11), (uint)IntPtr.Size);
-            ExecuteInDefaultAppDomain = Data.ToIntPtr(x64Bits);
-
+            ExecuteInDefaultAppDomain = Data.ToIntPtr(x64Bits);            
 
             Target.MFree(ICLRMetaHost);
             Target.MFree(ICLRRuntimeInfo);

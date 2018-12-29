@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using static VNX.Imports;
@@ -135,6 +136,19 @@ namespace VNX {
             }
 
             return Ptrs;
+        }
+
+        public static bool IsManaged(string File) {
+            if (!System.IO.File.Exists(File))
+                return false;
+            try {
+                AssemblyName Name = AssemblyName.GetAssemblyName(File);
+                return true;
+            } catch (BadImageFormatException Ex){
+                return false;
+            } catch (Exception Ex){
+                throw Ex;
+            }
         }
 
 

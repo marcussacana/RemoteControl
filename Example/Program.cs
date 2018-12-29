@@ -50,9 +50,10 @@ namespace Example {
             Console.WriteLine("1 - See the Sample Invoke");
             Console.WriteLine("2 - See the Sample Managed Assembly Injection 1");
             Console.WriteLine("3 - See the Sample Managed Assembly Injection 2");
-            Console.WriteLine("4 - See the Sample Modules Info");
-            Console.WriteLine("5 - See the Sample Read/Write in the target memory");
-            Console.WriteLine("6 - See the Sample Auto-Alloc in the target memory");
+            Console.WriteLine("4 - See the Sample Managed Assembly Injection 3");
+            Console.WriteLine("5 - See the Sample Modules Info");
+            Console.WriteLine("6 - See the Sample Read/Write in the target memory");
+            Console.WriteLine("7 - See the Sample Auto-Alloc in the target memory");
 
             char R = Console.ReadKey().KeyChar;
             Console.WriteLine();
@@ -68,12 +69,15 @@ namespace Example {
                     SampleManagedAssemblyInjection2(Control, Process);
                     break;
                 case '4':
-                    SampleModuleInfo(Control, Process);
+                    SampleManagedAssemblyInjection3(Control, Process);
                     break;
                 case '5':
-                    SampleReadWrite(Control, Process);
+                    SampleModuleInfo(Control, Process);
                     break;
                 case '6':
+                    SampleReadWrite(Control, Process);
+                    break;
+                case '7':
                     SampleMAlloc(Control, Process);
                     break;
             }
@@ -146,6 +150,9 @@ namespace Example {
         /// Inject the managed assembly when only have a single valid entrypoint
         /// </summary>
         public static void SampleManagedAssemblyInjection2(RemoteControl Control, Process Process) {
+            //Lock the program in his entrypoint, Required to invoke methods or inject libraries
+            Control.LockEntryPoint();
+
             //Get Current Assembly Path
             string CurrentAssembly = Assembly.GetExecutingAssembly().Location;
 
@@ -159,6 +166,25 @@ namespace Example {
 
             //Allow the program startup continue
             Control.UnlockEntryPoint();
+        }
+
+        /// <summary>
+        /// Inject the managed assembly when the target process is an managed process
+        /// </summary>
+        public static void SampleManagedAssemblyInjection3(RemoteControl Control, Process Process) {
+            //Wait the CLR initialize
+            Control.WaitCLR();
+
+            //Get Current Assembly Path
+            string CurrentAssembly = Assembly.GetExecutingAssembly().Location;
+
+            //Unfortally if the target process is an managed assembly, you can't inject the assembly before the target startup.
+            //When you call the CLRInvoke in a managed process the ResumeProcess will be automatically called.
+            int Ret = Control.CLRInvoke(CurrentAssembly, "LOL, I'm a managed dll inside of the managed target process!");
+
+
+            //Show the managed assembly returned data
+            Console.WriteLine("Returned: 0x" + Ret.ToString("X4"));
         }
 
         /// <summary>
@@ -264,7 +290,7 @@ namespace Example {
             for (uint i = 0; i < Address.Length; i++) {
                 string Content = Process.ReadString(Address[i], true);
                 if (Content != Message)
-                    Console.WriteLine("Validation Failed at 0x"+ Address[i].ToString(Parse));
+                    Console.WriteLine("Validation Failed at 0x" + Address[i].ToString(Parse));
             }
 
             Console.WriteLine("Disposing...");
