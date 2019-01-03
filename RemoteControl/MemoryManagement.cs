@@ -27,15 +27,19 @@ namespace VNX {
             return Address;
         }
 
-        public static void MFree(Process Process, IntPtr Address) {
+        public static void MFree(Process Process, IntPtr Address, bool IgnoreBadPointer = true) { 
             string Hash = GetHash(Process);
             ProcMap[Hash] = Process;
             if (!Regions.ContainsKey(Hash))
                 Regions[Hash] = new List<MemoryRegion>();
 
             int RIndex = GetRegionIndex(Hash, Address);
-            if (RIndex < 0)
-                throw new Exception("The given address isn't allocated by the MAlloc or is already disposed");
+            if (RIndex < 0) {
+                if (IgnoreBadPointer)
+                    return;
+                else
+                    throw new Exception("The given address isn't allocated by the MAlloc or is already disposed");
+            }
 
             ulong Addr = Address.ToUInt64();
             var Region = Regions[Hash][RIndex];

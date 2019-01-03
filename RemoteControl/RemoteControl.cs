@@ -256,7 +256,7 @@ namespace VNX {
         /// </summary>
         /// <param name="Version">Version to load in the target process</param>
         /// <returns>A Pointer to the <a href="https://docs.microsoft.com/en-us/dotnet/framework/unmanaged-api/hosting/iclrruntimehost-executeindefaultappdomain-method">ExecuteInDefaultAppDomain</a> function</returns>
-        public void StartCLR() {
+        public void StartCLR(FrameworkVersion Version = FrameworkVersion.DotNet40) {
             if (!IsCompatibleProcess())
                 throw new Exception($"The Target Process isn't an {(Environment.Is64BitProcess ? "x64" : "x32")} Process");
 

@@ -245,6 +245,6 @@ namespace VNX {
     }
 
     public enum FrameworkVersion {
-        DotNet40, DotNet35, DotNet30, DotNet20, DotNet11, DotNet10
+        Lastest, DotNet40, DotNet35, DotNet30, DotNet20, DotNet11, DotNet10
     }
 }

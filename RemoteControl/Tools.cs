@@ -99,6 +99,8 @@ namespace VNX {
                     return "v3.0";
                 case FrameworkVersion.DotNet35:
                     return "v3.5";
+                case FrameworkVersion.Lastest:
+                    return null;
                 default:
                     return "v4.0.30319";
             }
