@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Windows.Forms;
@@ -9,12 +10,6 @@ using VNX;
 
 namespace Example {
     public class Program {
-
-        //Valid EntryPoint to the managed assembly injector, (returns int, is public and have a single string parameter)
-        public static int EntryPoint(string Arg) {
-            MessageBox.Show(Arg, "Injected Assembly", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return int.MaxValue;
-        }
 
         static void Main(string[] args) {
             if (args?.Length == 0 || !File.Exists(args[0])) {
@@ -54,6 +49,7 @@ namespace Example {
             Console.WriteLine("5 - See the Sample Modules Info");
             Console.WriteLine("6 - See the Sample Read/Write in the target memory");
             Console.WriteLine("7 - See the Sample Auto-Alloc in the target memory");
+            Console.WriteLine("8 - See the Sample Unmanaged DLLExport Hook");
 
             char R = Console.ReadKey().KeyChar;
             Console.WriteLine();
@@ -79,6 +75,9 @@ namespace Example {
                     break;
                 case '7':
                     SampleMAlloc(Control, Process);
+                    break;
+                case '8':
+                    SampleUnmanagedDllExportHook(Control, Process);
                     break;
             }
 
@@ -301,5 +300,43 @@ namespace Example {
 
             Console.WriteLine("Finished");
         }
+
+        /// <summary>
+        /// Hooks an Unmanaged Function using the: <see cref="EntryPoint(string)"/>
+        /// </summary>
+        public static void SampleUnmanagedDllExportHook(RemoteControl Control, Process Process) {
+            //Lock the program in his entrypoint, Required to invoke methods or inject libraries
+            Control.LockEntryPoint();
+
+            //Get Current Assembly Path
+            string CurrentAssembly = Assembly.GetExecutingAssembly().Location;
+            
+            //Our EntryPoint will detect the "Hook" string as command to test the hook... 
+            int Ret = Control.CLRInvoke(CurrentAssembly, "Hook");
+
+            //Show the managed assembly returned data
+            Console.WriteLine("Returned: 0x" + Ret.ToString("X4"));
+
+
+            //Allow the program startup continue
+            Control.UnlockEntryPoint();
+        }
+
+        /// <summary>
+        /// Valid EntryPoint to the managed assembly injector, 
+        /// (returns int, is public (including the class) and have a single string parameter)
+        /// 
+        /// <para>If recive the string "Hook" from the Invoker will run the Sample DLLExport Hook</para>
+        /// </summary>
+        /// <param name="Arg">Arg that will be recived from the RemoteControl</param>
+        /// <returns>An Return value to the invoker</returns>
+        public static int EntryPoint(string Arg) {
+            if (Arg == "Hook")
+                ExampleHook.HookFont();
+            else
+                MessageBox.Show(Arg, "Injected Assembly", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return int.MaxValue;
+        }    
+
     }
 }

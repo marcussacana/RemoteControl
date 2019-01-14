@@ -6,11 +6,11 @@ using System.Runtime.InteropServices;
 // conjunto de atributos. Altere estes valores de atributo para modificar as informações
 // associada a um assembly.
 [assembly: AssemblyTitle("RemoteControl")]
-[assembly: AssemblyDescription("")]
+[assembly: AssemblyDescription("Remote Process Control Library")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
+[assembly: AssemblyCompany("VNX+")]
 [assembly: AssemblyProduct("RemoteControl")]
-[assembly: AssemblyCopyright("Copyright ©  2018")]
+[assembly: AssemblyCopyright("Copyright © VNX+ 2018")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 

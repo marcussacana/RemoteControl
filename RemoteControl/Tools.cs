@@ -10,10 +10,10 @@ using static VNX.Imports;
 
 namespace VNX {
     internal static class Tools {
-        public static PROCESS_INFORMATION CreateProcessSuspended(string Filename, string Arguments) {
+        public static PROCESS_INFORMATION CreateProcessSuspended(string Filename, string Arguments, string CurrentDirectory) {
             STARTUPINFO si = new STARTUPINFO();
             PROCESS_INFORMATION pi = new PROCESS_INFORMATION();
-            bool success = CreateProcess(Filename, null, IntPtr.Zero, IntPtr.Zero, false, ProcessCreationFlags.CREATE_SUSPENDED | ProcessCreationFlags.DEBUG_ONLY_THIS_PROCESS, IntPtr.Zero, null, ref si, out pi);
+            bool success = CreateProcess(Arguments != null ? null : Filename, Arguments != null ? $"\"{Filename}\" {Arguments}" : null, IntPtr.Zero, IntPtr.Zero, false, ProcessCreationFlags.CREATE_SUSPENDED | ProcessCreationFlags.DEBUG_ONLY_THIS_PROCESS, IntPtr.Zero, CurrentDirectory, ref si, out pi);
             if (!success)
                 throw new Exception("Failed to create the process");
 

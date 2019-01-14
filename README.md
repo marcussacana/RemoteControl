@@ -10,6 +10,7 @@ A Compact Library to do simple operations in a external process.
 - Can Inject before the target process execution begins
 - Can read, write and release data in the process memory
 - Supports x64 and x86 Applications
+- Hook Unmanaged Exports
 - And others minor but cool features...
 - Everything without extras files! you can merge the RemoteControl into your assembly and don't will see any dll!
 
@@ -98,7 +99,6 @@ Control.UnlockEntryPoint();
 
 ### Extra
 
-[Hook DLL Exports from Managed Assembly](https://github.com/marcussacana/StringReloads/blob/master/SRL/Hook/HookFX.cs)  
 [PInvoke Tools](https://github.com/dahall/Vanara)
 
 

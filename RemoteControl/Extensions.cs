@@ -68,7 +68,7 @@ namespace VNX {
         /// </summary>
         /// <param name="StartInfo">The StartInfo to create the process</param>
         /// <returns>The Created Process</returns>
-        public static Process StartSuspended(this ProcessStartInfo StartInfo) => Process.GetProcessById((int)CreateProcessSuspended(StartInfo.FileName, StartInfo.Arguments).dwProcessId);
+        public static Process StartSuspended(this ProcessStartInfo StartInfo) => Process.GetProcessById((int)CreateProcessSuspended(StartInfo.FileName, StartInfo.Arguments, StartInfo.WorkingDirectory).dwProcessId);
 
         /// <summary>
         /// Create an process

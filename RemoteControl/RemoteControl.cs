@@ -41,8 +41,9 @@ namespace VNX {
         /// <param name="Filename">Executable Path</param>
         /// <param name="Arguments">Command Line Arguments</param>
         /// <param name="CreatedProcess">The Created Process</param>
-        public RemoteControl(string Filename, out Process CreatedProcess, string Arguments = "") {
-            var PI = CreateProcessSuspended(Filename, Arguments);
+        /// <param name="WorkingDirectory">The working directory to the created process use</param>
+        public RemoteControl(string Filename, out Process CreatedProcess, string Arguments = "", string WorkingDirectory = null) {
+            var PI = CreateProcessSuspended(Filename, Arguments, WorkingDirectory);
 
             hProcess = PI.hProcess;
             Target = Process.GetProcessById(unchecked((int)PI.dwProcessId));
