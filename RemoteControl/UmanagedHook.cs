@@ -1,4 +1,4 @@
-﻿//#define ILDEBUG
+﻿#define ILDEBUG
 using System;
 using System.Runtime.InteropServices;
 using System.Reflection.Emit;
@@ -630,7 +630,9 @@ namespace VNX {
 
             Hook Hook = (Hook)InstanceMap[ID];
 
-            return Hook.GetDelegate().DynamicInvoke(Args);
+            object Result = Hook.GetDelegate().DynamicInvoke(Args);
+            Args.CopyTo(Parameters, 1);
+            return Result;
         }
 
 
