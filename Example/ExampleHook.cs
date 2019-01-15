@@ -29,11 +29,13 @@ namespace Example {
             new Thread(() => {
                 Thread.Sleep(1000);
 
+                //As you can see, will create a font with the facename Times New Roman
                 LOGFONTW Font = new LOGFONTW();
                 Font.lfFaceName = "Times New Roman";
                 CreateFontIndirectW(ref Font);
 
-                MessageBox.Show("Allways Comic Sans MS!\nChanged? If not, test it with the notepad...", "Injected Assembly", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                //Or is what you think...
+                MessageBox.Show($"Font Selected: {Font.lfFaceName}", "Injected Assembly", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
             }).Start();
         }
