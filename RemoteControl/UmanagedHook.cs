@@ -1,4 +1,11 @@
-﻿//#define ILDEBUG
+﻿/*
+    WARNING - CLASS SENSITIVE TO MODIFICATIONS 
+    Dear user, If you will apply obuscator or optimizators in this library,
+    Ensure of exclude this class of the target list to prevent problems.
+
+*/
+
+//#define ILDEBUG
 using System;
 using System.Runtime.InteropServices;
 using System.Reflection.Emit;
