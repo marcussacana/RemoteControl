@@ -84,6 +84,14 @@ namespace VNX {
             }
             if (Type.IsValueType && Type.IsEnum) {
                 Type VT = Enum.GetUnderlyingType(Type);
+
+                if (VT == typeof(int))
+                    return (T)Convert.ChangeType(Ptr.Pointer.ToInt32(), VT);
+                if (VT == typeof(uint))
+                    return (T)Convert.ChangeType(Ptr.Pointer.ToUInt32(), VT);
+                if (VT == typeof(long))
+                    return (T)Convert.ChangeType(Ptr.Pointer.ToInt64(), VT);
+
                 return (T)Convert.ChangeType(Ptr.Pointer.ToUInt64(), VT);
             }
             if (Type.IsSubclassOf(typeof(Delegate))) {

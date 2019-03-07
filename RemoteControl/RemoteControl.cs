@@ -25,7 +25,9 @@ namespace VNX {
         List<uint> RemoteThreads = new List<uint>();
 
         bool Debugging = false;
-        bool IsManaged = false;
+        public bool IsManaged { get; private set; } = false;
+
+        bool CLRNOTAVAILABLE = false;
 
         public RemoteControl(Process Proc) {
             Target = Proc;
@@ -264,10 +266,9 @@ namespace VNX {
             if (Debugging)
                 WaitInitialize();
 
-            if (IsManaged) {
+            if (IsManaged)
                 ResumeProcess();
-            } else if (CLRAvaliable())
-                throw new Exception("The target process already have loaded the CLR");
+            
 
             IntPtr ICLRMetaHost    = Target.MAlloc(new byte[IntPtr.Size]);//http://source.roslyn.codeplex.com/#Microsoft.CodeAnalysis/Interop/IClrMetaHost.cs
             IntPtr ICLRRuntimeInfo = Target.MAlloc(new byte[IntPtr.Size]);//http://source.roslyn.codeplex.com/#microsoft.codeanalysis/Interop/IClrRuntimeInfo.cs,485a48c96d61baeb,references
@@ -321,7 +322,7 @@ namespace VNX {
             Data = Target.Read(Start, (uint)IntPtr.Size);
             Start = Data.ToIntPtr(x64Bits);
 
-            if (IsManaged) {
+            if (IsManaged || (CLRAvaliable() && !CLRNOTAVAILABLE)) {
                 Data = Target.Read(Start.Sum(IntPtr.Size * 11), (uint)IntPtr.Size);
                 ExecuteInDefaultAppDomain = Data.ToIntPtr(x64Bits);
 
@@ -386,6 +387,15 @@ namespace VNX {
             switch (Failed) {
                 case HResult.S_OK:
                     break;
+
+                case HResult.HOST_E_CLRNOTAVAILABLE:
+                    if (CLRNOTAVAILABLE)
+                        goto default;
+
+                    CLRNOTAVAILABLE = true;
+                    ExecuteInDefaultAppDomain = IntPtr.Zero;
+                    return CLRInvoke(AssemblyPath, TypeName, MethodName, Argument);
+
                 default:
                     throw new Exception($"Error: {Failed.ToString()} (0x{((uint)Failed).ToString("X8")})");
             }
