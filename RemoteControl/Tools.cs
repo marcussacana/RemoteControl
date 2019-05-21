@@ -197,13 +197,90 @@ namespace VNX {
             throw new EntryPointNotFoundException();
         }
 
-        public static IntPtr GetModuleEntryPoint(Process Target, IntPtr Module) {
+        public static IntPtr GetModuleEntryPoint(Process Target, IntPtr Module)
+        {
             ulong PEStart = Read(Target.Handle, Module.Sum(0x3C), 4).ToUInt32();
-            ulong OptionalHeader = PEStart + 24;
+            ulong OptionalHeader = PEStart + 0x18;
             IntPtr EntryPointPtr = (OptionalHeader + 0x10).ToIntPtr();
 
             byte[] EP = Read(Target.Handle, Module.Sum(EntryPointPtr), 4);
             return Module.Sum(EP.ToUInt32());
+        }
+
+        public static ImportEntry[] GetModuleImports(Process Target, IntPtr Module)
+        {
+            uint PtrSize = Target.Is64Bits() ? 8u : 4u;
+
+            ulong OrdinalFlag = (1ul << (int)((8 * PtrSize) - 1));
+
+            IntPtr Handle = Target.Handle;
+            ulong PEStart = Read(Handle, Module.Sum(0x3C), 4).ToUInt32();
+            ulong OptionalHeader = PEStart + 0x18;
+
+            ulong ImageDataDirectoryPtr = OptionalHeader + (PtrSize == 8 ? 0x70u : 0x60u);
+
+            ulong ImportTableEntry = ImageDataDirectoryPtr + 0x8;
+
+            IntPtr RVA = ImportTableEntry.ToIntPtr();
+
+            IntPtr ImportDesc = Module.Sum(Read(Handle, Module.Sum(RVA), 4).ToUInt32());
+
+            if (ImportDesc == Module)
+                return new ImportEntry[0];
+
+            List<ImportEntry> Entries = new List<ImportEntry>();
+
+            while (true)
+            {
+                uint OriginalFirstThunk = Read(Handle, ImportDesc.Sum(4 * 0), 4).ToUInt32();
+                //uint TimeDateStamp  =     Read(Handle, ImportDesc.Sum(4 * 1), 4).ToUInt32();
+                //uint ForwarderChain =     Read(Handle, ImportDesc.Sum(4 * 2), 4).ToUInt32();
+                uint Name =               Read(Handle, ImportDesc.Sum(4 * 3), 4).ToUInt32();
+                uint FirstThunk =         Read(Handle, ImportDesc.Sum(4 * 4), 4).ToUInt32();
+
+                if (OriginalFirstThunk == 0x00)
+                    break;
+
+                string ModuleName = ReadString(Handle, Module.Sum(Name), false);
+
+                IntPtr DataAddr = Module.Sum(OriginalFirstThunk);
+                IntPtr IATAddr  = Module.Sum(FirstThunk);
+                while (true)
+                {
+                    IntPtr EntryPtr = Read(Handle, DataAddr, PtrSize).ToIntPtr();
+
+                    if (EntryPtr == IntPtr.Zero)
+                        break;
+
+                    bool ImportByOrdinal = false;
+                    if ((EntryPtr.ToUInt64() & OrdinalFlag) == OrdinalFlag)
+                    {
+                        EntryPtr = (EntryPtr.ToUInt64() ^ OrdinalFlag).ToIntPtr();
+                        ImportByOrdinal = true;
+                    }
+                    else
+                        EntryPtr = Module.Sum(EntryPtr);
+
+                    ushort Hint = ImportByOrdinal ? (ushort)EntryPtr.ToUInt32() : Read(Handle, EntryPtr, 2).ToUInt16();
+                    string ExportName = ImportByOrdinal ? null : ReadString(Handle, EntryPtr.Sum(2), false);
+
+                    Entries.Add(new ImportEntry() {
+                        Function = ExportName,
+                        Ordinal = Hint,
+                        Module = ModuleName,
+                        ImportAddress = IATAddr,
+                        FunctionAddress = Read(Handle, IATAddr, PtrSize).ToIntPtr()
+                    });
+
+                    DataAddr = DataAddr.Sum(PtrSize);
+                    IATAddr = IATAddr.Sum(PtrSize);
+                }
+
+
+                ImportDesc = ImportDesc.Sum(0x14);//sizeof(_IMAGE_IMPORT_DESCRIPTOR)
+            }
+
+            return Entries.ToArray();
         }
 
         public static IntPtr AllocString(IntPtr hProcess, string String, bool Unicode) {

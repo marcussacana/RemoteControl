@@ -84,6 +84,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Debugger.cs" />
+    <Compile Include="Exports.cs" />
     <Compile Include="Extensions.cs" />
     <Compile Include="HResults.cs" />
     <Compile Include="Imports.cs" />

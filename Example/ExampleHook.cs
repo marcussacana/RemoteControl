@@ -1,4 +1,6 @@
-﻿using System;
+﻿#define MainModuleOnly
+using System;
+using System.Linq;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -6,13 +8,48 @@ using System.Windows.Forms;
 using VNX;
 
 namespace Example {
-    static class ExampleHook {
+    static class ExampleHook
+    {
+
         /// <summary>
-        /// Sample Font Hook 
+        /// Sample Font Import Hook (Hook calls from the main module only)
         /// <para> Warning: This is just a sample, don't works with any application, tested with notepad.
         /// This only hooks the CreateFontIndirectW, we have it CreateFontA, CreateFontW and CreateFontIndirectA to handle with others programs</para>
         /// </summary>
-        public static void HookFont() {
+        public static void ImportHookFont()
+        {
+            //Attachs the Debugger
+            Debugger.Launch();
+
+            //Create the delegate and assign the hook function to him
+            dCreateFontIndirect = new CreateFontIndirectWDelegate(CreateFontIndirectWHook);
+
+
+            //Search the CreateFontIndirectW Import
+            var ImportTarget = (from x in Process.GetCurrentProcess().GetImports()
+                                where x.Function == "CreateFontIndirectW" && x.Module.ToLower() == "gdi32.dll"
+                                select x).Single();
+
+            //Create to the given dll import of the main module with the given delegate
+            hCreateFontIndirect = new UnmanagedHook<CreateFontIndirectWDelegate>(ImportTarget, dCreateFontIndirect);
+
+            //Install the Hook
+            hCreateFontIndirect.Install();
+
+            //The Hook by the Module Import can be called only target module,
+            //so we can't see the face name change like in the 'global' method
+            MessageBox.Show($"Hook Enabled, Try change the font :)\nTested with the Win10 Notepad (x64)", "Injected Assembly", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+
+
+        /// <summary>
+        /// Sample Font Global Hook (Hook any call of the target process)
+        /// <para> Warning: This is just a sample, don't works with any application, tested with notepad.
+        /// This only hooks the CreateFontIndirectW, we have it CreateFontA, CreateFontW and CreateFontIndirectA to handle with others programs</para>
+        /// </summary>
+        public static void GlobalHookFont()
+        {
             //Attachs the Debugger
             Debugger.Launch();
 
@@ -36,7 +73,6 @@ namespace Example {
 
                 //Or is what you think...
                 MessageBox.Show($"Font Selected: {Font.lfFaceName}", "Injected Assembly", MessageBoxButtons.OK, MessageBoxIcon.Information);
-
             }).Start();
         }
 
@@ -61,7 +97,7 @@ namespace Example {
 
 
         //LOGFONT structure
-        #region LOGFONT
+#region LOGFONT
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         public struct LOGFONTW {
             public const int LF_FACESIZE = 32;
@@ -172,6 +208,6 @@ namespace Example {
             FF_SCRIPT = (4 << 4),
             FF_DECORATIVE = (5 << 4),
         }
-        #endregion
+#endregion
     }
 }

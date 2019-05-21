@@ -30,6 +30,7 @@ namespace VNX {
         public static byte[] GetBytes(this long Value) => BitConverter.GetBytes(Value);
 
         public static uint ToUInt32(this byte[] Data, int Address = 0) => BitConverter.ToUInt32(Data, Address);
+        public static ushort ToUInt16(this byte[] Data, int Address = 0) => BitConverter.ToUInt16(Data, Address);
         public static int ToInt32(this byte[] Data, int Address = 0) => BitConverter.ToInt32(Data, Address);
         public static ulong ToUInt64(this byte[] Data, int Address = 0) => BitConverter.ToUInt64(Data, Address);
         public static long ToInt64(this byte[] Data, int Address = 0) => BitConverter.ToInt64(Data, Address);
@@ -267,5 +268,20 @@ namespace VNX {
         /// <returns></returns>
         public static bool LibraryLoaded(this Process Process, string Library) => Tools.LibraryLoaded(Process, Library);
 
+
+        /// <summary>
+        /// Enumarete all imports of a module in the specified process
+        /// </summary>
+        /// <param name="Process">The process that have loaded the module</param>
+        /// <param name="Module">The module to enumarte the imports</param>
+        /// <returns>All Import Entries</returns>
+        public static ImportEntry[] GetModuleImports(this Process Process, IntPtr Module) => Tools.GetModuleImports(Process, Module);
+
+        /// <summary>
+        /// Enumarete all imports of a specified process main module
+        /// </summary>
+        /// <param name="Process">The process that have loaded the module</param>
+        /// <returns>All Import Entries</returns>
+        public static ImportEntry[] GetImports(this Process Process) => Tools.GetModuleImports(Process, Process.GetMainModule());
     }
 }

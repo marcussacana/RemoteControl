@@ -45,6 +45,7 @@ namespace VNX {
         byte[] src = new byte[nBytes];
         byte[] dst = new byte[nBytes];
         bool AutoHook = false;
+        bool ImportHook = false;
 
         List<dynamic> Followers = new List<dynamic>();
 
@@ -84,6 +85,25 @@ namespace VNX {
             addr = Original;
         }
 
+        /// <summary>
+        /// Install a hook exclusive to a certain module (Using the IAT Method)
+        /// </summary>
+        /// <param name="Import">The Module Import To Hook</param>
+        /// <param name="Hook">The Delegate with the hook function</param>
+        public UnmanagedHook(ImportEntry Import, T Hook)
+        {
+            ImportHook = true;
+
+            addr = Import.ImportAddress;
+
+            src = new byte[IntPtr.Size];
+            VirtualProtect(Import.ImportAddress, IntPtr.Size, Protection.PAGE_READWRITE, out old);
+            Marshal.Copy(Import.ImportAddress, src, 0, IntPtr.Size);
+
+            destination = Marshal.GetFunctionPointerForDelegate(Hook);
+            dst = BitConverter.GetBytes(IntPtr.Size == 8 ? destination.ToUInt64() : destination.ToUInt32());
+        }
+
 
         /// <summary>
         /// Create a new hook to the function in given pointer
@@ -97,7 +117,8 @@ namespace VNX {
         /// <param name="Library">The Library name, Ex: Kernel32.dll</param>
         /// <param name="Function">The Function name, Ex: CreateFile</param>
         /// <param name="Hook">The delegate wit the hook function</param>
-        public UnmanagedHook(string Library, string Function, T Hook) : this(GetProcAddress(LoadLibrary(Library), Function), Hook) { }
+        public UnmanagedHook(string Library, string Function, T Hook) : this(GetProcAddress(LoadLibrary(Library), Function), Hook) {
+        }
 
 
         /// Create a new Hook
@@ -106,7 +127,9 @@ namespace VNX {
         /// <param name="Function">The Function name, Ex: CreateFile</param>
         /// <param name="Hook">The delegate wit the hook function</param>
         /// <param name="AutoHook">When true the hook will be automatically uninstalled during he execution</param>
-        public UnmanagedHook(string Library, string Function, T Hook, bool AutoHook) : this(GetProcAddress(LoadLibrary(Library), Function), Hook, AutoHook) { }
+        public UnmanagedHook(string Library, string Function, T Hook, bool AutoHook) : this(GetProcAddress(LoadLibrary(Library), Function), Hook, AutoHook) {
+
+        }
 
         void GenerateMethod() {            
             string ID = CurrentID++.ToString();
@@ -506,7 +529,7 @@ namespace VNX {
         /// Install the hook
         /// </summary>
         public void Install() {
-            Marshal.Copy(dst, 0, addr, nBytes);
+            Marshal.Copy(dst, 0, addr, ImportHook ? IntPtr.Size : nBytes);
         }
 
 
@@ -514,7 +537,7 @@ namespace VNX {
         /// Uninstall the hook
         /// </summary>
         public void Uninstall() {
-            Marshal.Copy(src, 0, addr, nBytes);
+            Marshal.Copy(src, 0, addr, ImportHook ? IntPtr.Size : nBytes);
         }
 
         Delegate Hook.GetDelegate() {

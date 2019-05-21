@@ -49,7 +49,8 @@ namespace Example {
             Console.WriteLine("5 - See the Sample Modules Info");
             Console.WriteLine("6 - See the Sample Read/Write in the target memory");
             Console.WriteLine("7 - See the Sample Auto-Alloc in the target memory");
-            Console.WriteLine("8 - See the Sample Unmanaged DLLExport Hook");
+            Console.WriteLine("8 - See the Sample Unmanaged DLLImport Hook");
+            Console.WriteLine("9 - See the Sample Unmanaged DLLExport Hook");
 
             char R = Console.ReadKey().KeyChar;
             Console.WriteLine();
@@ -77,7 +78,10 @@ namespace Example {
                     SampleMAlloc(Control, Process);
                     break;
                 case '8':
-                    SampleUnmanagedDllExportHook(Control, Process);
+                    SampleUnmanagedDllExportHook1(Control, Process);
+                    break;
+                case '9':
+                    SampleUnmanagedDllExportHook2(Control, Process);
                     break;
             }
 
@@ -209,6 +213,20 @@ namespace Example {
                 Console.WriteLine("Module:" + (Main ? "\t" : "\t\t") + Process.GetModuleNameByHandler(Module));
                 Console.WriteLine("Handler:\t0x" + Module.ToString(Parse));
                 Console.WriteLine("EntryPoint:\t0x" + Process.GetModuleEntryPoint(Module).ToString(Parse));
+                var Imports = Process.GetModuleImports(Module);
+
+                if (Main)
+                {
+                    Console.WriteLine("Imports:");
+                    foreach (var Import in Imports)
+                    {
+                        Console.WriteLine("\tModule Name:\t\t" + Import.Module);
+                        Console.WriteLine("\tFunction Name:\t\t" + (Import.Function ?? $"Ordinal#{Import.Ordinal}"));
+                        Console.WriteLine("\tImport Address:\t\t0x" + Import.ImportAddress.ToString(Parse));
+                        Console.WriteLine("\tFunction Address:\t0x" + Import.FunctionAddress.ToString(Parse));
+                        Console.WriteLine();
+                    }
+                }
                 Console.WriteLine();
             }
         }
@@ -302,17 +320,40 @@ namespace Example {
         }
 
         /// <summary>
-        /// Hooks an Unmanaged Function using the: <see cref="EntryPoint(string)"/>
+        /// Hook The Main Module Import Using The: <see cref="EntryPoint(string)"/>
         /// </summary>
-        public static void SampleUnmanagedDllExportHook(RemoteControl Control, Process Process) {
+        public static void SampleUnmanagedDllExportHook1(RemoteControl Control, Process Process)
+        {
             //Lock the program in his entrypoint, Required to invoke methods or inject libraries
             Control.LockEntryPoint();
 
             //Get Current Assembly Path
             string CurrentAssembly = Assembly.GetExecutingAssembly().Location;
-            
+
             //Our EntryPoint will detect the "Hook" string as command to test the hook... 
-            int Ret = Control.CLRInvoke(CurrentAssembly, "Hook");
+            int Ret = Control.CLRInvoke(CurrentAssembly, "ImportHook");
+
+            //Show the managed assembly returned data
+            Console.WriteLine("Returned: 0x" + Ret.ToString("X4"));
+
+
+            //Allow the program startup continue
+            Control.UnlockEntryPoint();
+        }
+
+        /// <summary>
+        /// Hooks an Unamanged Function Using The: <see cref="EntryPoint(string)"/>
+        /// </summary>
+        public static void SampleUnmanagedDllExportHook2(RemoteControl Control, Process Process)
+        {
+            //Lock the program in his entrypoint, Required to invoke methods or inject libraries
+            Control.LockEntryPoint();
+
+            //Get Current Assembly Path
+            string CurrentAssembly = Assembly.GetExecutingAssembly().Location;
+
+            //Our EntryPoint will detect the "Hook" string as command to test the hook... 
+            int Ret = Control.CLRInvoke(CurrentAssembly, "GlobalHook");
 
             //Show the managed assembly returned data
             Console.WriteLine("Returned: 0x" + Ret.ToString("X4"));
@@ -331,8 +372,10 @@ namespace Example {
         /// <param name="Arg">Arg that will be recived from the RemoteControl</param>
         /// <returns>An Return value to the invoker</returns>
         public static int EntryPoint(string Arg) {
-            if (Arg == "Hook")
-                ExampleHook.HookFont();
+            if (Arg == "ImportHook")
+                ExampleHook.ImportHookFont();
+            else if (Arg == "GlobalHook")
+                ExampleHook.GlobalHookFont();
             else
                 MessageBox.Show(Arg, "Injected Assembly", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return int.MaxValue;
