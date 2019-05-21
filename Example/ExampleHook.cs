@@ -1,5 +1,4 @@
-﻿#define MainModuleOnly
-using System;
+﻿using System;
 using System.Linq;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
