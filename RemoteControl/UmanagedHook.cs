@@ -31,8 +31,76 @@ namespace VNX {
         /// <param name="Library">The Library name, Ex: Kernel32.dll</param>
         /// <param name="Function">The Function name, Ex: CreateFile</param>
         /// <param name="Hook">The delegate wit the hook function</param>
-        public UnmanagedHook(string Library, string Function, Delegate Hook) : base(Library, Function, Hook, false) {}
-        
+        public UnmanagedHook(string Library, string Function, Delegate Hook) : base(Library, Function, Hook, false) { }
+
+        /// Create a new Hook
+        /// </summary>
+        /// <param name="Library">The Library name, Ex: Kernel32.dll</param>
+        /// <param name="Ordinal">The Function Ordinal</param>
+        /// <param name="Hook">The delegate wit the hook function</param>
+        public UnmanagedHook(string Library, ushort Ordinal, Delegate Hook) : base(Library, Ordinal, Hook, false) { }
+
+        /// Create a new Hook
+        /// </summary>
+        /// <param name="Import">The Import Entry to install the hook</param>
+        /// <param name="Hook">The delegate wit the hook function</param>
+        public UnmanagedHook(ImportEntry Import, Delegate Hook) : base(Import, Hook) { }
+
+        /// <summary>
+        /// Create a hook by Import if possible
+        /// </summary>
+        /// <param name="Library"></param>
+        /// <param name="Function"></param>
+        /// <param name="Hook"></param>
+        /// <returns></returns>
+        public static UnmanagedHook TryHookImport(string Library, string Function, Delegate Hook)
+        {
+            var Import = GetImport(Library, Function);
+            if (Import.HasValue)
+                return new UnmanagedHook(Import.Value, Hook);
+            else
+                return new UnmanagedHook(Library, Function, Hook);
+        }
+
+        /// <summary>
+        /// Create a hook by Import if possible
+        /// </summary>
+        /// <param name="Library"></param>
+        /// <param name="Ordinal"></param>
+        /// <param name="Hook"></param>
+        /// <returns></returns>
+        public static UnmanagedHook TryHookImport(string Library, ushort Ordinal, Delegate Hook)
+        {
+            var Import = GetImport(Library, Ordinal);
+            if (Import.HasValue)
+                return new UnmanagedHook(Import.Value, Hook);
+            else
+                return new UnmanagedHook(Library, Ordinal, Hook);
+        }
+
+        private static ImportEntry? GetImport(string Module, string Function)
+        {
+            try
+            {
+                return (from x in Process.GetCurrentProcess().GetImports() where (x.Module.ToLower() == Module.ToLower() && Function == x.Function) select x).Single();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static ImportEntry? GetImport(string Module, ushort Ordinal)
+        {
+            try
+            {
+                return (from x in Process.GetCurrentProcess().GetImports() where (x.Module.ToLower() == Module.ToLower() && Ordinal == x.Ordinal) select x).Single();
+            }
+            catch
+            {
+                return null;
+            }
+        }
     }
 
     public class UnmanagedHook<T> : IDisposable, Hook where T : Delegate {
@@ -45,7 +113,8 @@ namespace VNX {
         byte[] src = new byte[nBytes];
         byte[] dst = new byte[nBytes];
         bool AutoHook = false;
-        bool ImportHook = false;
+
+        public bool ImportHook { get; private set; } = false;
 
         List<dynamic> Followers = new List<dynamic>();
 
@@ -111,7 +180,7 @@ namespace VNX {
         /// <param name="Original">The pointer of the unmanaged function to hook</param>
         /// <param name="Hook">The delegate with the hook function</param>
         public UnmanagedHook(IntPtr Original, T Hook) : this(Original, Hook, true) { }
-
+        
         /// Create a new Hook
         /// </summary>
         /// <param name="Library">The Library name, Ex: Kernel32.dll</param>
@@ -120,6 +189,13 @@ namespace VNX {
         public UnmanagedHook(string Library, string Function, T Hook) : this(GetProcAddress(LoadLibrary(Library), Function), Hook) {
         }
 
+        /// Create a new Hook
+        /// </summary>
+        /// <param name="Library">The Library name, Ex: Kernel32.dll</param>
+        /// <param name="Ordinal">The Function Ordinal</param>
+        /// <param name="Hook">The delegate wit the hook function</param>
+        public UnmanagedHook(string Library, ushort Ordinal, T Hook) : this(GetProcAddress(LoadLibrary(Library), Ordinal), Hook) {
+        }
 
         /// Create a new Hook
         /// </summary>
@@ -128,7 +204,15 @@ namespace VNX {
         /// <param name="Hook">The delegate wit the hook function</param>
         /// <param name="AutoHook">When true the hook will be automatically uninstalled during he execution</param>
         public UnmanagedHook(string Library, string Function, T Hook, bool AutoHook) : this(GetProcAddress(LoadLibrary(Library), Function), Hook, AutoHook) {
+        }
 
+        /// Create a new Hook
+        /// </summary>
+        /// <param name="Library">The Library name, Ex: Kernel32.dll</param>
+        /// <param name="Ordinal">The Function Ordinal</param>
+        /// <param name="Hook">The delegate wit the hook function</param>
+        /// <param name="AutoHook">When true the hook will be automatically uninstalled during he execution</param>
+        public UnmanagedHook(string Library, ushort Ordinal, T Hook, bool AutoHook) : this(GetProcAddress(LoadLibrary(Library), Ordinal), Hook, AutoHook) {
         }
 
         void GenerateMethod() {            
@@ -675,6 +759,9 @@ namespace VNX {
 
         [DllImport("kernel32", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
         internal static extern IntPtr GetProcAddress(IntPtr hModule, string procName);
+
+        [DllImport("kernel32", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
+        internal static extern IntPtr GetProcAddress(IntPtr hModule, ushort Ordinal);
 
         [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Ansi)]
         internal static extern IntPtr LoadLibrary([MarshalAs(UnmanagedType.LPStr)]string lpFileName);

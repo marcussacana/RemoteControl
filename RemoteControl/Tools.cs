@@ -255,7 +255,7 @@ namespace VNX {
                     bool ImportByOrdinal = false;
                     if ((EntryPtr.ToUInt64() & OrdinalFlag) == OrdinalFlag)
                     {
-                        EntryPtr = (EntryPtr.ToUInt64() ^ OrdinalFlag).ToIntPtr();
+                        EntryPtr = ((PtrSize == 8 ? EntryPtr.ToUInt64() : EntryPtr.ToUInt32()) ^ OrdinalFlag).ToIntPtr();
                         ImportByOrdinal = true;
                     }
                     else
