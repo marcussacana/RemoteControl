@@ -105,7 +105,7 @@ namespace VNX {
                     throw new Exception("Failed to lock the entrypoint...");
             }
 
-            SetThreadPriority(MainThread, THREAD_PRIORITY.THREAD_PRIORITY_LOWEST);
+            SetThreadPriority(MainThread, THREAD_PRIORITY.LOWEST);
             ResumeProcess();
         }
 
@@ -124,7 +124,7 @@ namespace VNX {
 
             Locks = new List<LockInfo>();
 
-            SetThreadPriority(MainThread, THREAD_PRIORITY.THREAD_PRIORITY_NORMAL);
+            SetThreadPriority(MainThread, THREAD_PRIORITY.NORMAL);
             ResumeThreads();
         }
 

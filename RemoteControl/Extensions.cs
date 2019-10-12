@@ -63,6 +63,9 @@ namespace VNX {
     }
 
     public static class Extensions {
+
+        static Process CurrentProcess = Process.GetCurrentProcess();
+
         /// <summary>
         /// Create an Suspended Process
         /// <para>Only the executale path and arguments will be used</para>
@@ -190,7 +193,7 @@ namespace VNX {
         /// <param name="Address">Address to write</param>
         /// <param name="Content">Content to write</param>
         /// <returns>if writed with sucess, will return true</returns>
-        public static bool Write(this Process Process, IntPtr Address, byte[] Content) => Tools.Write(Process.Handle, Address, Content);
+        public static bool Write(this Process Process, IntPtr Address, byte[] Content) => Process.Id == CurrentProcess.Id ? Tools.Write(IntPtr.Zero, Address, Content) : Tools.Write(Process.Handle, Address, Content);
 
 
         /// <summary>
@@ -199,7 +202,7 @@ namespace VNX {
         /// <param name="Address">Address to read</param>
         /// <param name="Length">Length in bytes to read</param>
         /// <returns>The readed content</returns>
-        public static byte[] Read(this Process Process, IntPtr Address, uint Length) => Tools.Read(Process.Handle, Address, Length);
+        public static byte[] Read(this Process Process, IntPtr Address, uint Length) => Process.Id == CurrentProcess.Id ? Tools.Read(IntPtr.Zero, Address, Length) : Tools.Read(Process.Handle, Address, Length);
 
 
 

@@ -312,7 +312,13 @@ namespace VNX {
 
         public static bool Write(IntPtr hProcess, IntPtr Address, byte[] Content, ProtectionType? NewProtection = null) {
             ChangeProtection(hProcess, Address, (uint)Content.LongLength, ProtectionType.PAGE_READWRITE, out ProtectionType Original);
-            WriteProcessMemory(hProcess, Address, Content, (uint)Content.LongLength, out uint Saved);
+            
+            uint Saved = (uint)Content.LongLength;
+
+            if (hProcess == IntPtr.Zero)
+                Marshal.Copy(Content, 0, Address, Content.Length);
+            else
+                WriteProcessMemory(hProcess, Address, Content, (uint)Content.LongLength, out Saved);
 
             if (NewProtection.HasValue)
                 ChangeProtection(hProcess, Address, (uint)Content.LongLength, NewProtection.Value);
@@ -327,8 +333,15 @@ namespace VNX {
         public static byte[] Read(IntPtr hProcess, IntPtr Address, uint Length) {
             byte[] Buffer = new byte[Length];
             ChangeProtection(hProcess, Address, (uint)Buffer.LongLength, ProtectionType.PAGE_READWRITE, out ProtectionType Original);
-            ReadProcessMemory(hProcess, Address, Buffer, (uint)Buffer.LongLength, out uint Readed);
+            
+            uint Readed = (uint)Buffer.LongLength;
+            if (hProcess == IntPtr.Zero)
+                Marshal.Copy(Address, Buffer, 0, Buffer.Length);
+            else
+                ReadProcessMemory(hProcess, Address, Buffer, (uint)Buffer.LongLength, out Readed);
+
             ChangeProtection(hProcess, Address, (uint)Buffer.LongLength, Original);
+
             if (Readed != Buffer.Length)
                 throw new Exception("Failed to Read the Process Memory");
 
@@ -354,16 +367,23 @@ namespace VNX {
             return Unicode ? Encoding.Unicode.GetString(Buffer.ToArray()) : Encoding.Default.GetString(Buffer.ToArray());
         }
 
-        public static bool Free(IntPtr hProcess, IntPtr Address, uint Length = 0) {
+        public static bool Free(IntPtr hProcess, IntPtr Address, uint Length = 0)
+        {
+            if (hProcess == IntPtr.Zero)
+                return VirtualFree(Address, Length, AllocationType.Release);
             return VirtualFreeEx(hProcess, Address, Length, AllocationType.Release);
         }
 
         public static bool ChangeProtection(IntPtr hProcess, IntPtr Address, uint Range, ProtectionType Protection, out ProtectionType OriginalProtection) {
+            if (hProcess == IntPtr.Zero)
+                return VirtualProtect(Address, Range, Protection, out OriginalProtection);
             return VirtualProtectEx(hProcess, Address, Range, Protection, out OriginalProtection);
         }
 
         public static bool ChangeProtection(IntPtr hProcess, IntPtr Address, uint Range, ProtectionType Protection) {
-            return VirtualProtectEx(hProcess, Address, Range, Protection, out ProtectionType OriginalProtection);
+            if (hProcess == IntPtr.Zero)
+                return VirtualProtect(Address, Range, Protection, out _);
+            return VirtualProtectEx(hProcess, Address, Range, Protection, out _);
         }
 
     }

@@ -27,6 +27,17 @@ namespace VNX {
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern bool VirtualProtectEx(IntPtr hProcess, IntPtr lpAddress, uint dwSize, ProtectionType flNewProtect, out ProtectionType lpflOldProtect);
 
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool VirtualProtect(IntPtr lpAddress, uint dwSize, ProtectionType flNewProtect, out ProtectionType lpflOldProtect);
+
+        [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
+        public static extern IntPtr VirtualAlloc(IntPtr lpAddress, uint dwSize, AllocationType flAllocationType, ProtectionType flProtect);
+
+        [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
+        public static extern bool VirtualFree(IntPtr lpAddress, uint dwSize, AllocationType dwFreeType);
+
+
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern bool WriteProcessMemory(IntPtr hProcess, IntPtr lpBaseAddress, byte[] lpBuffer, uint nSize, out uint lpNumberOfBytesWritten);
 
@@ -176,13 +187,13 @@ namespace VNX {
         public enum THREAD_PRIORITY {
             THREAD_MODE_BACKGROUND_BEGIN = 0x00010000,
             THREAD_MODE_BACKGROUND_END = 0x00020000,
-            THREAD_PRIORITY_ABOVE_NORMAL = 1,
-            THREAD_PRIORITY_BELOW_NORMAL = -1,
-            THREAD_PRIORITY_HIGHEST = 2,
-            THREAD_PRIORITY_IDLE = -15,
-            THREAD_PRIORITY_LOWEST = -2,
-            THREAD_PRIORITY_NORMAL = 0,
-            THREAD_PRIORITY_TIME_CRITICAL = 15
+            ABOVE_NORMAL = 1,
+            BELOW_NORMAL = -1,
+            HIGHEST = 2,
+            IDLE = -15,
+            LOWEST = -2,
+            NORMAL = 0,
+            TIME_CRITICAL = 15
         }
 
 
