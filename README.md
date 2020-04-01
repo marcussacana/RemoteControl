@@ -61,7 +61,7 @@ Control.UnlockEntryPoint();
 Console.WriteLine("Press any key to exit");
 Console.ReadKey();
 ```
-![https://a.doko.moe/dqhajo.png](https://a.doko.moe/dqhajo.png)
+![image](https://user-images.githubusercontent.com/10576957/78092167-620c6900-73a5-11ea-9797-d34804683d53.png)
 ### Injecting a Managed Assembly
 ```csharp
 public static int EntryPoint(string Arg) {
@@ -95,7 +95,7 @@ int Ret = Control.CLRInvoke(CurrentAssembly, Message);
 Control.UnlockEntryPoint();
 }
 ```
-![https://a.doko.moe/ikwzem.png](https://a.doko.moe/ikwzem.png)
+![image](https://user-images.githubusercontent.com/10576957/78092187-7badb080-73a5-11ea-8e26-9b4e2e9c44ed.png)
 
 ### Extra
 
