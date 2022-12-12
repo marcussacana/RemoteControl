@@ -671,6 +671,8 @@ namespace VNX {
 
                     RemoteThreads.Remove(TID);
 
+                    Buffer = Target.Read(RetData, (uint)Buffer.LongLength);
+
                     Target.MFree(Function);
 
                     return BitConverter.ToUInt32(Buffer, 1).ToIntPtr();
@@ -856,6 +858,8 @@ namespace VNX {
                     } while (Status == THREAD_STILL_ACTIVE);
 
                     RemoteThreads.Remove(TID);
+
+                    Buffer = Target.Read(RetData, (uint)Buffer.LongLength);
 
                     Target.MFree(Function);
 
